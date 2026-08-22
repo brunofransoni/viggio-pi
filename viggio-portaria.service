@@ -1,0 +1,17 @@
+[Unit]
+Description=Viggio Tech — Software da Portaria
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=pi
+WorkingDirectory=/home/pi/viggio-portaria
+ExecStart=/home/pi/viggio-portaria/venv/bin/python main.py
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

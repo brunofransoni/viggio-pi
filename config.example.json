@@ -1,0 +1,9 @@
+{
+  "api_url": "https://api.viggiotech.com.br",
+  "api_key": "COLE_A_API_KEY_DO_POSTE_AQUI",
+  "polling_interval": 5,
+  "pwa_url": "https://app.viggiotech.com.br",
+  "volume_alerta": 80,
+  "canais_portaria": [0, 1, 2],
+  "canais_poste": [3, 4, 5]
+}
