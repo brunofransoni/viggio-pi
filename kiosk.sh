@@ -13,8 +13,19 @@ xset s noblank
 # Ocultar cursor do mouse após 5 segundos de inatividade
 unclutter -idle 5 -root &
 
+# O binário do pacote chromium-browser varia por distro/versão do Debian —
+# em alguns o comando é "chromium-browser", em outros só "chromium".
+if command -v chromium-browser >/dev/null 2>&1; then
+  CHROMIUM=chromium-browser
+elif command -v chromium >/dev/null 2>&1; then
+  CHROMIUM=chromium
+else
+  echo "Nenhum binário do chromium encontrado (chromium-browser/chromium)" >&2
+  exit 1
+fi
+
 # Abrir Chromium em modo kiosk — tela cheia, sem barra, sem botões
-chromium-browser \
+"$CHROMIUM" \
   --kiosk \
   --noerrdialogs \
   --disable-infobars \
