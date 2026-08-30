@@ -1,7 +1,8 @@
 import json
 import os
 
-CONFIG_FILE = '/home/pi/viggio-portaria/config.json'
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+CONFIG_FILE = os.path.join(BASE_DIR, 'config.json')
 
 DEFAULTS = {
     'api_url': 'https://api.viggiotech.com.br',

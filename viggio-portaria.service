@@ -5,9 +5,9 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-User=pi
-WorkingDirectory=/home/pi/viggio-portaria
-ExecStart=/home/pi/viggio-portaria/venv/bin/python main.py
+User=__USER__
+WorkingDirectory=__DIR__
+ExecStart=__DIR__/venv/bin/python main.py
 Restart=always
 RestartSec=10
 StandardOutput=journal

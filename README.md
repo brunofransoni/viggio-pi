@@ -49,20 +49,25 @@ POSTE
 
 ## Instalação
 
+Clone com o usuário normal que vai rodar o serviço (não root/sudo) — pode
+ser qualquer usuário e qualquer diretório, o `install.sh` detecta os dois
+automaticamente e usa em tudo (venv, systemd, config):
+
 ```bash
-git clone <este repo> /home/pi/viggio-portaria
-cd /home/pi/viggio-portaria
+git clone https://github.com/brunofransoni/viggio-pi.git viggio-portaria
+cd viggio-portaria
 bash install.sh
 ```
 
 O `install.sh` instala dependências do sistema, habilita I2C, cria a venv,
 instala os pacotes Python, copia `config.example.json` → `config.json` (se
-ainda não existir) e registra os dois serviços systemd.
+ainda não existir) e registra os dois serviços systemd (com `User=` e
+`WorkingDirectory=` apontando pro usuário/diretório reais do clone).
 
 Depois do install:
 
 ```bash
-nano /home/pi/viggio-portaria/config.json   # colar a API key do poste
+nano config.json   # colar a API key do poste ou dispositivo
 sudo reboot
 ```
 
@@ -95,7 +100,7 @@ checagem — não derruba o processo em execução.
 
 Pra atualizar manualmente sem esperar o próximo ciclo:
 ```bash
-cd /home/pi/viggio-portaria
+cd viggio-portaria   # o diretório onde foi clonado
 git pull
 sudo systemctl restart viggio-portaria
 ```

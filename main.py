@@ -4,12 +4,13 @@ Viggio Tech — Software da Portaria
 Polling + controle LED + log de estado
 """
 
+import os
 import time
 import signal
 import sys
 import logging
 import requests
-from config import carregar
+from config import carregar, CONFIG_FILE, BASE_DIR
 from led_controller import LEDController
 from audio import tocar, inicializar_sons
 from updater import ha_atualizacao, aplicar_atualizacao
@@ -19,7 +20,7 @@ logging.basicConfig(
     format='%(asctime)s [%(levelname)s] %(message)s',
     handlers=[
         logging.StreamHandler(),
-        logging.FileHandler('/home/pi/viggio-portaria/viggio.log'),
+        logging.FileHandler(os.path.join(BASE_DIR, 'viggio.log')),
     ]
 )
 log = logging.getLogger('viggio')
@@ -110,7 +111,7 @@ def main():
     inicializar_sons()
 
     if not config['api_key']:
-        log.error('API key não configurada! Edite /home/pi/viggio-portaria/config.json')
+        log.error(f'API key não configurada! Edite {CONFIG_FILE}')
         led.piscar_alerta('ambos', velocidade=1.0)
         time.sleep(10)
 

@@ -1,9 +1,10 @@
 import subprocess
 import logging
+import os
 
 log = logging.getLogger('viggio')
 
-REPO_DIR = '/home/pi/viggio-portaria'
+REPO_DIR = os.path.dirname(os.path.abspath(__file__))
 
 def _git(*args, timeout=15):
     return subprocess.run(

@@ -1,9 +1,14 @@
 #!/bin/bash
 # Viggio Tech — Instalação completa no Raspberry Pi 5
-# Rodar como: bash install.sh
+# Rodar de dentro do diretório clonado, como o usuário normal (não root/sudo):
+#   cd viggio-portaria && bash install.sh
 
 set -e
 echo "=== Viggio Tech — Instalação da Portaria ==="
+
+INSTALL_DIR="$(pwd)"
+INSTALL_USER="$(whoami)"
+echo "Instalando em $INSTALL_DIR como usuário $INSTALL_USER"
 
 # 1. Atualizar sistema
 sudo apt-get update && sudo apt-get upgrade -y
@@ -22,24 +27,24 @@ sudo raspi-config nonint do_i2c 0
 echo "I2C habilitado"
 
 # 4. Criar ambiente virtual Python
-python3 -m venv /home/pi/viggio-portaria/venv
-source /home/pi/viggio-portaria/venv/bin/activate
+python3 -m venv "$INSTALL_DIR/venv"
+source "$INSTALL_DIR/venv/bin/activate"
 
 # 5. Instalar dependências Python
 pip install -r requirements.txt
 
 # 6. Criar config inicial a partir do template
-if [ ! -f /home/pi/viggio-portaria/config.json ]; then
-  cp config.example.json /home/pi/viggio-portaria/config.json
-  echo "⚠️  Edite /home/pi/viggio-portaria/config.json e adicione a API key!"
+if [ ! -f "$INSTALL_DIR/config.json" ]; then
+  cp config.example.json "$INSTALL_DIR/config.json"
+  echo "⚠️  Edite $INSTALL_DIR/config.json e adicione a API key!"
 fi
 
 # 7. Permissão de execução
 chmod +x kiosk.sh
 
-# 8. Instalar serviços systemd
-sudo cp viggio-portaria.service /etc/systemd/system/
-sudo cp viggio-kiosk.service /etc/systemd/system/
+# 8. Instalar serviços systemd (substitui usuário/diretório reais nos templates)
+sed -e "s|__USER__|$INSTALL_USER|g" -e "s|__DIR__|$INSTALL_DIR|g" viggio-portaria.service | sudo tee /etc/systemd/system/viggio-portaria.service > /dev/null
+sed -e "s|__USER__|$INSTALL_USER|g" -e "s|__DIR__|$INSTALL_DIR|g" viggio-kiosk.service | sudo tee /etc/systemd/system/viggio-kiosk.service > /dev/null
 sudo systemctl daemon-reload
 sudo systemctl enable viggio-portaria viggio-kiosk
 sudo systemctl start viggio-portaria
@@ -47,8 +52,8 @@ sudo systemctl start viggio-portaria
 echo "=== Instalação concluída! ==="
 echo ""
 echo "Próximos passos:"
-echo "1. Editar config: nano /home/pi/viggio-portaria/config.json"
-echo "2. Adicionar API key do poste"
+echo "1. Editar config: nano $INSTALL_DIR/config.json"
+echo "2. Adicionar API key do poste ou dispositivo"
 echo "3. Reiniciar: sudo reboot"
 echo ""
 echo "Verificar status: sudo systemctl status viggio-portaria"

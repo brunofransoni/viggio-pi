@@ -5,9 +5,9 @@ Wants=graphical.target
 
 [Service]
 Type=simple
-User=pi
+User=__USER__
 Environment=DISPLAY=:0
-ExecStart=/home/pi/viggio-portaria/kiosk.sh
+ExecStart=__DIR__/kiosk.sh
 Restart=always
 RestartSec=5
 

@@ -4,10 +4,12 @@ import wave
 
 import numpy as np
 
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+SONS_DIR = os.path.join(BASE_DIR, 'sounds')
 SONS = {
-    'alerta':  '/home/pi/viggio-portaria/sounds/alerta.wav',
-    'atencao': '/home/pi/viggio-portaria/sounds/atencao.wav',
-    'ok':      '/home/pi/viggio-portaria/sounds/ok.wav',
+    'alerta':  os.path.join(SONS_DIR, 'alerta.wav'),
+    'atencao': os.path.join(SONS_DIR, 'atencao.wav'),
+    'ok':      os.path.join(SONS_DIR, 'ok.wav'),
 }
 
 def tocar(tipo, volume=80):
@@ -35,7 +37,7 @@ def gerar_beep(arquivo, frequencia=880, duracao=0.5, volume=0.8):
 
 def inicializar_sons():
     """Cria os sons se não existirem."""
-    os.makedirs('/home/pi/viggio-portaria/sounds', exist_ok=True)
+    os.makedirs(SONS_DIR, exist_ok=True)
     if not os.path.exists(SONS['alerta']):
         # Beep urgente: alta frequência, curto
         gerar_beep(SONS['alerta'], frequencia=1200, duracao=0.15)
