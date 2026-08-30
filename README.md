@@ -102,8 +102,8 @@ journalctl -u viggio-portaria -f
 journalctl -u viggio-kiosk -f
 ```
 
-Estados: `normal` = branca ligada, `atencao` = branca + vermelha ligadas,
-`alerta` = vermelha piscando, `offline` = tudo apagado (sem conexão com o
+Estados: `normal` = vermelha ligada (fixa), `atencao` = vermelha piscando,
+`alerta` = branca ligada (fixa), `offline` = tudo apagado (sem conexão com o
 backend).
 
 ## Estrutura

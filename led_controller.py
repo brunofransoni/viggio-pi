@@ -52,26 +52,25 @@ class LEDController:
         self._thread_piscar.start()
 
     def estado_normal(self):
-        """Branca acesa, vermelha apagada."""
+        """Vermelha acesa (fixa), branca apagada."""
         self._parar_piscar()
-        self._definir(branca=True, vermelha=False)
+        self._definir(branca=False, vermelha=True)
 
     def aplicar_estado(self, estado):
         """
         Aplica estado vindo do backend.
         estado: 'normal' | 'atencao' | 'alerta' | 'offline'
 
-        normal:  branca ligada, vermelha desligada
-        atencao: branca + vermelha ligadas (só combinação possível sem
-                 piscar — não existe "amarelo" com lâmpadas comuns)
-        alerta:  vermelha piscando
+        normal:  vermelha ligada (fixa)
+        atencao: vermelha piscando
+        alerta:  branca ligada (fixa)
         offline: tudo apagado
         """
-        if estado == 'alerta':
+        if estado == 'atencao':
             self._piscar_vermelha(velocidade=0.3)
-        elif estado == 'atencao':
+        elif estado == 'alerta':
             self._parar_piscar()
-            self._definir(branca=True, vermelha=True)
+            self._definir(branca=True, vermelha=False)
         elif estado == 'offline':
             self._parar_piscar()
             self._definir(branca=False, vermelha=False)

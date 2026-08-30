@@ -124,7 +124,7 @@ def main():
 
     if not config['api_key']:
         log.error(f'API key não configurada! Edite {CONFIG_FILE}')
-        led.aplicar_estado('alerta')
+        led.aplicar_estado('atencao')  # pisca — mais visível que 'alerta' (agora fixo)
         time.sleep(10)
 
     # Estado inicial
