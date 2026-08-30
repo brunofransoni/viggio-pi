@@ -20,7 +20,8 @@ sudo apt-get install -y \
   unclutter \
   alsa-utils \
   i2c-tools \
-  swig
+  swig \
+  liblgpio-dev
 
 # libgpiod teve o nome do pacote runtime trocado entre versões do Debian
 # (libgpiod2 em Bookworm e anteriores, libgpiod3 a partir do Trixie, por
