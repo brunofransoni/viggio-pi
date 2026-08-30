@@ -7,7 +7,7 @@ import busio
 # Cores predefinidas (valores 0-65535 para 16-bit PWM)
 # Fita RGB analógica: 0 = apagado, 65535 = máximo brilho
 CORES = {
-    'normal':   (0,     0,     32767),  # branco quente suave
+    'normal':   (45000, 38000, 22000),  # branco quente suave
     'atencao':  (65535, 45000, 0    ),  # amarelo
     'alerta':   (65535, 0,     0    ),  # vermelho
     'offline':  (0,     0,     16383),  # azul escuro
