@@ -19,8 +19,12 @@ sudo apt-get install -y \
   chromium-browser \
   unclutter \
   alsa-utils \
-  i2c-tools \
-  libgpiod2
+  i2c-tools
+
+# libgpiod teve o nome do pacote runtime trocado entre versões do Debian
+# (libgpiod2 em Bookworm e anteriores, libgpiod3 a partir do Trixie, por
+# causa de um bump de ABI incompatível) — tenta os dois.
+sudo apt-get install -y libgpiod2 || sudo apt-get install -y libgpiod3
 
 # 3. Habilitar I2C no Pi 5
 sudo raspi-config nonint do_i2c 0
