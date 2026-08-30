@@ -70,13 +70,35 @@ sudo reboot
 
 | Campo               | Descrição                                      |
 |---------------------|-------------------------------------------------|
-| `api_url`           | URL base do backend Viggio Tech                 |
-| `api_key`           | API key do poste (painel admin)                 |
-| `polling_interval`  | Intervalo do heartbeat, em segundos              |
-| `pwa_url`           | URL do PWA aberto no kiosk                       |
-| `volume_alerta`     | Volume dos sons de alerta (0-100)                |
-| `canais_portaria`   | Canais PCA9685 [R,G,B] da fita da portaria       |
-| `canais_poste`      | Canais PCA9685 [R,G,B] da fita do poste          |
+| `api_url`                | URL base do backend Viggio Tech                    |
+| `api_key`                | API key do poste ou dispositivo (painel admin)     |
+| `polling_interval`       | Intervalo do heartbeat, em segundos                |
+| `update_check_interval`  | Intervalo entre checagens de atualização, em segundos |
+| `pwa_url`                | URL do PWA aberto no kiosk                         |
+| `volume_alerta`          | Volume dos sons de alerta (0-100)                  |
+| `canais_portaria`        | Canais PCA9685 [R,G,B] da fita da portaria         |
+| `canais_poste`           | Canais PCA9685 [R,G,B] da fita do poste            |
+
+## Atualização automática
+
+`main.py` confere periodicamente (a cada `update_check_interval` segundos,
+independente do heartbeat) se `origin/main` avançou. Se sim, faz `git pull
+--ff-only` e sai do processo — o systemd (`Restart=always` no
+`viggio-portaria.service`) sobe o processo de novo já com o código
+atualizado, sem precisar de acesso root para reiniciar o serviço.
+
+Repositório é público (`github.com/brunofransoni/viggio-pi`), então isso
+funciona sem nenhum token/credencial configurado no Pi. Se o `git pull`
+falhar (ex.: sem internet, ou arquivos alterados manualmente no Pi que
+impedem o fast-forward), ele só loga o erro e tenta de novo na próxima
+checagem — não derruba o processo em execução.
+
+Pra atualizar manualmente sem esperar o próximo ciclo:
+```bash
+cd /home/pi/viggio-portaria
+git pull
+sudo systemctl restart viggio-portaria
+```
 
 ## Verificação
 

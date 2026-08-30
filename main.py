@@ -12,6 +12,7 @@ import requests
 from config import carregar
 from led_controller import LEDController
 from audio import tocar, inicializar_sons
+from updater import ha_atualizacao, aplicar_atualizacao
 
 logging.basicConfig(
     level=logging.INFO,
@@ -82,6 +83,19 @@ def processar_estado(estado):
     elif estado == 'normal' and estado_anterior_local == 'alerta':
         tocar('ok', config['volume_alerta'])
 
+def verificar_e_atualizar():
+    """Se houver uma versão nova no repositório, aplica e reinicia.
+
+    Sai do processo em vez de recarregar módulos em memória — o systemd
+    (Restart=always) sobe o processo de novo já com o código atualizado.
+    """
+    if not ha_atualizacao():
+        return
+    log.info('Nova versão encontrada, atualizando...')
+    if aplicar_atualizacao():
+        log.info('Atualização aplicada, reiniciando...')
+        sys.exit(0)
+
 def encerrar(sig, frame):
     log.info('Encerrando...')
     led.estado_normal()
@@ -103,9 +117,16 @@ def main():
     # Estado inicial
     led.estado_normal()
 
+    proxima_verificacao_update = time.time() + config['update_check_interval']
+
     while True:
         estado = consultar_backend()
         processar_estado(estado)
+
+        if time.time() >= proxima_verificacao_update:
+            verificar_e_atualizar()
+            proxima_verificacao_update = time.time() + config['update_check_interval']
+
         time.sleep(config['polling_interval'])
 
 if __name__ == '__main__':

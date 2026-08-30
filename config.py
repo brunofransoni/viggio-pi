@@ -7,6 +7,7 @@ DEFAULTS = {
     'api_url': 'https://api.viggiotech.com.br',
     'api_key': '',           # API key do poste — obtida no painel admin
     'polling_interval': 5,  # segundos
+    'update_check_interval': 1800,  # segundos entre checagens de atualização (30 min)
     'pwa_url': 'https://app.viggiotech.com.br',
     'volume_alerta': 80,     # 0-100
     # Canais PCA9685
