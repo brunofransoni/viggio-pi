@@ -5,6 +5,7 @@ Polling + controle LED + log de estado
 """
 
 import os
+import socket
 import time
 import signal
 import sys
@@ -30,6 +31,17 @@ led = LEDController(config['canais_portaria'], config['canais_poste'])
 
 estado_anterior = None
 
+def obter_ip_local():
+    """Descobre o IP local do Pi na rede (sem depender de serviços externos)."""
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        s.connect(('8.8.8.8', 80))
+        return s.getsockname()[0]
+    except OSError:
+        return None
+    finally:
+        s.close()
+
 def consultar_backend():
     """Consulta o backend e retorna o estado atual das lâmpadas."""
     try:
@@ -42,7 +54,7 @@ def consultar_backend():
             json={
                 'versaoFirmware': '1.0.0-portaria',
                 'conectividade': 'ethernet',
-                'ipLocal': 'portaria',
+                'ipLocal': obter_ip_local(),
             },
             timeout=8,
         )
