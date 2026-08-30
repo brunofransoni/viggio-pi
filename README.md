@@ -1,51 +1,32 @@
 # viggio-portaria
 
-Software que roda no Raspberry Pi 5 instalado na portaria do condomínio. Faz
-polling no backend Viggio Tech, controla as fitas LED RGB (portaria + poste)
-via PCA9685, toca sons de alerta e sobe o Chromium em modo kiosk apontando
-para o PWA do porteiro.
+Software que roda no Raspberry Pi 5 do **Poste Sentinela**. Faz polling no
+backend Viggio Tech, aciona duas lâmpadas (branca/vermelha) via relé
+comandado pelo PCA9685, toca sons de alerta e sobe o Chromium em modo kiosk
+apontando para o PWA do porteiro.
 
 ## Hardware
 
-- Raspberry Pi 5 8GB
+- Raspberry Pi 5 (lado lógico, 5V DC)
+- PCA9685 via I2C (SDA/SCL/5V/GND do Pi)
+- Módulo relé de 2 canais (SRD-05VDC-SL-C ou equivalente, tipicamente
+  **ativo em nível baixo** — sinal LOW energiza o relé)
+  - PCA9685 OUT0 → relé IN1 → lâmpada **branca**
+  - PCA9685 OUT1 → relé IN2 → lâmpada **vermelha**
+- Lado de potência (110/220V AC) isolado do lado lógico: fase passa pelo
+  disjuntor bipolar até o COM de cada relé; NO1/NO2 alimentam cada grupo de
+  lâmpadas; neutro vai direto às lâmpadas
 - Touchscreen HDMI 7" (1024x600)
-- PCA9685 via I2C
-- Fita LED RGB 5050 12V analógica
-  - Canais 0,1,2 → fita da **portaria**
-  - Canais 3,4,5 → fio 4 vias → fita do **poste**
 - Rede cabeada até o backend (Hetzner)
 
-```
-PORTARIA
-┌─────────────────────────────────────────────────┐
-│                                                 │
-│  Raspberry Pi 5                                 │
-│  ┌──────────┐                                   │
-│  │ GPIO SDA ├──┐                                │
-│  │ GPIO SCL ├──┤                                │
-│  │ GND      ├──┤                                │
-│  │ 3.3V     ├──┘                                │
-│  └──────────┘  │                               │
-│                ▼                               │
-│  ┌─────────────────────┐                       │
-│  │     PCA9685          │                       │
-│  │  CH0(R) CH1(G) CH2(B)│ → Fita LED portaria  │
-│  │  CH3(R) CH4(G) CH5(B)│ → Fio 4 vias → POSTE│
-│  │  V+ GND              │ ← Driver 12V          │
-│  └─────────────────────┘                       │
-│                                                 │
-│  Tela HDMI ← Pi 5 (HDMI)                       │
-│  Cabo de rede → Hetzner                         │
-└─────────────────────────────────────────────────┘
-         │
-         │ Fio 4 vias (GND + R + G + B), até 50 metros
-         ▼
-POSTE
-┌─────────────────────────────────────────────────┐
-│  Fita LED RGB 5050 IP65                         │
-│  (alimentada pelo Driver 12V do poste)          │
-└─────────────────────────────────────────────────┘
-```
+Só o **relé liga/desliga** — não existe mistura de cor como numa fita RGB.
+Os 4 estados lógicos (`normal`/`atencao`/`alerta`/`offline`) mapeiam pras
+combinações fisicamente possíveis de branca/vermelha ligada, desligada ou
+piscando — ver `led_controller.py`.
+
+**Importante — isolamento elétrico:** o lado lógico (Pi/PCA9685/relé, 5V) e
+o lado de potência (110/220V AC) devem ficar fisicamente isolados; use DPS
+(proteção contra surtos) e DR (diferencial residual) no lado de potência.
 
 ## Instalação
 
@@ -81,8 +62,9 @@ sudo reboot
 | `update_check_interval`  | Intervalo entre checagens de atualização, em segundos |
 | `pwa_url`                | URL do PWA aberto no kiosk                         |
 | `volume_alerta`          | Volume dos sons de alerta (0-100)                  |
-| `canais_portaria`        | Canais PCA9685 [R,G,B] da fita da portaria         |
-| `canais_poste`           | Canais PCA9685 [R,G,B] da fita do poste            |
+| `canal_branca`           | Canal PCA9685 ligado ao IN1 do relé (lâmpada branca) |
+| `canal_vermelha`         | Canal PCA9685 ligado ao IN2 do relé (lâmpada vermelha) |
+| `rele_ativo_baixo`       | `true` se o módulo relé aciona em nível lógico baixo (padrão dos SRD-05VDC-SL-C comuns) |
 
 ## Atualização automática
 
@@ -120,15 +102,16 @@ journalctl -u viggio-portaria -f
 journalctl -u viggio-kiosk -f
 ```
 
-Estados de LED: `normal` = branco, `atencao` = amarelo, `alerta` = vermelho
-piscando, `offline` = azul escuro (sem conexão com o backend).
+Estados: `normal` = branca ligada, `atencao` = branca + vermelha ligadas,
+`alerta` = vermelha piscando, `offline` = tudo apagado (sem conexão com o
+backend).
 
 ## Estrutura
 
 ```
 viggio-portaria/
 ├── main.py                  # processo principal (polling + controle LED)
-├── led_controller.py        # controle PCA9685 / fita RGB
+├── led_controller.py        # controle PCA9685 / relé (lâmpada branca+vermelha)
 ├── audio.py                 # sons de alerta
 ├── config.py                # loader/saver de config.json
 ├── config.example.json      # template de config

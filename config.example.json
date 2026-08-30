@@ -5,6 +5,7 @@
   "update_check_interval": 1800,
   "pwa_url": "https://app.viggiotech.com.br",
   "volume_alerta": 80,
-  "canais_portaria": [0, 1, 2],
-  "canais_poste": [3, 4, 5]
+  "canal_branca": 0,
+  "canal_vermelha": 1,
+  "rele_ativo_baixo": true
 }

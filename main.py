@@ -27,7 +27,7 @@ logging.basicConfig(
 log = logging.getLogger('viggio')
 
 config = carregar()
-led = LEDController(config['canais_portaria'], config['canais_poste'])
+led = LEDController(config['canal_branca'], config['canal_vermelha'], config['rele_ativo_baixo'])
 
 estado_anterior = None
 
@@ -124,7 +124,7 @@ def main():
 
     if not config['api_key']:
         log.error(f'API key não configurada! Edite {CONFIG_FILE}')
-        led.piscar_alerta('ambos', velocidade=1.0)
+        led.aplicar_estado('alerta')
         time.sleep(10)
 
     # Estado inicial

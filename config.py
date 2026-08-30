@@ -11,9 +11,10 @@ DEFAULTS = {
     'update_check_interval': 1800,  # segundos entre checagens de atualização (30 min)
     'pwa_url': 'https://app.viggiotech.com.br',
     'volume_alerta': 80,     # 0-100
-    # Canais PCA9685
-    'canais_portaria': [0, 1, 2],  # R, G, B da portaria
-    'canais_poste':    [3, 4, 5],  # R, G, B do poste
+    # PCA9685 -> relé de 2 canais -> lâmpada branca / vermelha
+    'canal_branca':    0,
+    'canal_vermelha':  1,
+    'rele_ativo_baixo': True,  # SRD-05VDC-SL-C tipicamente aciona em nível baixo
 }
 
 def carregar():
