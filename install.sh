@@ -19,7 +19,8 @@ sudo apt-get install -y \
   chromium-browser \
   unclutter \
   alsa-utils \
-  i2c-tools
+  i2c-tools \
+  swig
 
 # libgpiod teve o nome do pacote runtime trocado entre versões do Debian
 # (libgpiod2 em Bookworm e anteriores, libgpiod3 a partir do Trixie, por
