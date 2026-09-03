@@ -109,6 +109,18 @@ journalctl -u viggio-portaria -f
 journalctl -u viggio-kiosk -f
 ```
 
+Se as lâmpadas não baterem com o esperado (cor errada acendendo, ou mais de
+uma coisa ligando junto), pare o `viggio-portaria` e rode o diagnóstico de
+canais — liga um canal do PCA9685 por vez pra você anotar visualmente o que
+cada número realmente aciona, sem depender do backend:
+```bash
+sudo systemctl stop viggio-portaria
+python3 testar_canais.py
+```
+Ajuste `canal_branca`/`canal_amarela`/`canal_vermelha`/`canal_sirene` em
+`config.json` conforme o que você observar, depois `sudo systemctl start
+viggio-portaria`.
+
 Estados: `normal` = branca ligada, `atencao` = amarela ligada, `alerta` =
 vermelha ligada, `offline` = tudo apagado (sem conexão com o backend) —
 nenhum pisca. Sirene liga/desliga por comando manual, só válido durante
