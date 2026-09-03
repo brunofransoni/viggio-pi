@@ -27,9 +27,13 @@ logging.basicConfig(
 log = logging.getLogger('viggio')
 
 config = carregar()
-led = LEDController(config['canal_branca'], config['canal_vermelha'], config['rele_ativo_baixo'])
+led = LEDController(
+    config['canal_branca'], config['canal_amarela'], config['canal_vermelha'],
+    config['canal_sirene'], config['rele_ativo_baixo'],
+)
 
 estado_anterior = None
+sirene_anterior = False
 
 def obter_ip_local():
     """Descobre o IP local do Pi na rede (sem depender de serviços externos)."""
@@ -43,7 +47,7 @@ def obter_ip_local():
         s.close()
 
 def consultar_backend():
-    """Consulta o backend e retorna o estado atual das lâmpadas."""
+    """Consulta o backend e retorna (estadoLampada, sirene)."""
     try:
         resposta = requests.post(
             f"{config['api_url']}/api/postes/heartbeat",
@@ -60,41 +64,44 @@ def consultar_backend():
         )
         if resposta.ok:
             dados = resposta.json()
-            return dados.get('estadoLampada', 'normal')
+            return dados.get('estadoLampada', 'normal'), dados.get('sirene', False)
         log.warning(f'Backend respondeu com status {resposta.status_code}')
-        return 'offline'
+        return 'offline', False
     except requests.exceptions.ConnectionError:
         log.warning('Sem conexão com o backend')
-        return 'offline'
+        return 'offline', False
     except Exception as e:
         log.error(f'Erro ao consultar backend: {e}')
-        return 'offline'
+        return 'offline', False
 
-def processar_estado(estado):
-    """Aplica mudanças quando o estado muda."""
-    global estado_anterior
+def processar_estado(estado, sirene):
+    """Aplica mudanças quando o estado ou a sirene mudam."""
+    global estado_anterior, sirene_anterior
 
-    if estado == estado_anterior:
-        return  # nada mudou
+    if estado != estado_anterior:
+        log.info(f'Estado mudou: {estado_anterior} → {estado}')
+        estado_anterior_local = estado_anterior
+        estado_anterior = estado
 
-    log.info(f'Estado mudou: {estado_anterior} → {estado}')
-    estado_anterior_local = estado_anterior
-    estado_anterior = estado
+        led.aplicar_estado(estado)
 
-    led.aplicar_estado(estado)
+        # Tocar som conforme urgência
+        if estado == 'alerta':
+            tocar('alerta', config['volume_alerta'])
+            # Tocar 3 vezes para alertas críticos
+            time.sleep(0.5)
+            tocar('alerta', config['volume_alerta'])
+            time.sleep(0.5)
+            tocar('alerta', config['volume_alerta'])
+        elif estado == 'atencao':
+            tocar('atencao', config['volume_alerta'])
+        elif estado == 'normal' and estado_anterior_local == 'alerta':
+            tocar('ok', config['volume_alerta'])
 
-    # Tocar som conforme urgência
-    if estado == 'alerta':
-        tocar('alerta', config['volume_alerta'])
-        # Tocar 3 vezes para alertas críticos
-        time.sleep(0.5)
-        tocar('alerta', config['volume_alerta'])
-        time.sleep(0.5)
-        tocar('alerta', config['volume_alerta'])
-    elif estado == 'atencao':
-        tocar('atencao', config['volume_alerta'])
-    elif estado == 'normal' and estado_anterior_local == 'alerta':
-        tocar('ok', config['volume_alerta'])
+    if sirene != sirene_anterior:
+        log.info(f'Sirene mudou: {sirene_anterior} → {sirene}')
+        sirene_anterior = sirene
+        led.definir_sirene(sirene)
 
 def verificar_e_atualizar():
     """Se houver uma versão nova no repositório, aplica e reinicia.
@@ -111,7 +118,6 @@ def verificar_e_atualizar():
 
 def encerrar(sig, frame):
     log.info('Encerrando...')
-    led.estado_normal()
     led.desligar()
     sys.exit(0)
 
@@ -124,17 +130,21 @@ def main():
 
     if not config['api_key']:
         log.error(f'API key não configurada! Edite {CONFIG_FILE}')
-        led.aplicar_estado('atencao')  # pisca — mais visível que 'alerta' (agora fixo)
+        led.aplicar_estado('alerta')  # vermelho — sinal de erro mais intuitivo
         time.sleep(10)
 
-    # Estado inicial
+    # Estado inicial — garante que a sirene comece desligada (o relé fica
+    # em estado indefinido até o primeiro comando; sem isso, se o primeiro
+    # heartbeat também disser sirene=False, definir_sirene nunca seria
+    # chamado por não detectar mudança).
     led.estado_normal()
+    led.definir_sirene(False)
 
     proxima_verificacao_update = time.time() + config['update_check_interval']
 
     while True:
-        estado = consultar_backend()
-        processar_estado(estado)
+        estado, sirene = consultar_backend()
+        processar_estado(estado, sirene)
 
         if time.time() >= proxima_verificacao_update:
             verificar_e_atualizar()

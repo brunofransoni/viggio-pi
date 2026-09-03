@@ -1,28 +1,33 @@
 # viggio-portaria
 
 Software que roda no Raspberry Pi 5 do **Poste Sentinela**. Faz polling no
-backend Viggio Tech, aciona duas lâmpadas (branca/vermelha) via relé
-comandado pelo PCA9685, toca sons de alerta e sobe o Chromium em modo kiosk
-apontando para o PWA do porteiro.
+backend Viggio Tech, aciona três lâmpadas (branca/amarela/vermelha) e uma
+sirene via relés comandados pelo PCA9685, toca sons de alerta e sobe o
+Chromium em modo kiosk apontando para o PWA do porteiro.
 
 ## Hardware
 
 - Raspberry Pi 5 (lado lógico, 5V DC)
-- PCA9685 via I2C (SDA/SCL/5V/GND do Pi)
-- Módulo relé de 2 canais (SRD-05VDC-SL-C ou equivalente, tipicamente
-  **ativo em nível baixo** — sinal LOW energiza o relé)
-  - PCA9685 OUT0 → relé IN1 → lâmpada **branca**
-  - PCA9685 OUT1 → relé IN2 → lâmpada **vermelha**
+- 2× câmeras USB (CAM1/CAM2)
+- PCA9685 via I2C (SDA/SCL/3.3V/GND do Pi)
+- 2× módulos relé de 2 canais (SRD-05VDC-SL-C ou equivalente, tipicamente
+  **ativo em nível baixo** — sinal LOW energiza o relé) — 4 canais ao todo:
+  - PCA9685 PWM0 → lâmpada **branca**
+  - PCA9685 PWM1 → lâmpada **amarela**
+  - PCA9685 PWM2 → lâmpada **vermelha**
+  - PCA9685 PWM3 → **sirene**
 - Lado de potência (110/220V AC) isolado do lado lógico: fase passa pelo
-  disjuntor bipolar até o COM de cada relé; NO1/NO2 alimentam cada grupo de
-  lâmpadas; neutro vai direto às lâmpadas
+  disjuntor até o COM de cada relé; NO alimenta cada lâmpada/sirene; neutro
+  vai direto às cargas
 - Touchscreen HDMI 7" (1024x600)
 - Rede cabeada até o backend (Hetzner)
 
-Só o **relé liga/desliga** — não existe mistura de cor como numa fita RGB.
-Os 4 estados lógicos (`normal`/`atencao`/`alerta`/`offline`) mapeiam pras
-combinações fisicamente possíveis de branca/vermelha ligada, desligada ou
-piscando — ver `led_controller.py`.
+Só o **relé liga/desliga** — não existe mistura de cor como numa fita RGB, e
+nenhum estado pisca. Cada um dos 4 estados lógicos (`normal`/`atencao`/
+`alerta`/`offline`) acende exatamente uma lâmpada fixa (ou nenhuma, no caso
+de `offline`) — ver `led_controller.py`. A sirene é independente do estado:
+só liga por comando manual (porteiro/admin), e só enquanto o estado for
+`alerta` — o backend força a sirene a desligar assim que o estado muda.
 
 **Importante — isolamento elétrico:** o lado lógico (Pi/PCA9685/relé, 5V) e
 o lado de potência (110/220V AC) devem ficar fisicamente isolados; use DPS
@@ -62,9 +67,11 @@ sudo reboot
 | `update_check_interval`  | Intervalo entre checagens de atualização, em segundos |
 | `pwa_url`                | URL do PWA aberto no kiosk                         |
 | `volume_alerta`          | Volume dos sons de alerta (0-100)                  |
-| `canal_branca`           | Canal PCA9685 ligado ao IN1 do relé (lâmpada branca) |
-| `canal_vermelha`         | Canal PCA9685 ligado ao IN2 do relé (lâmpada vermelha) |
-| `rele_ativo_baixo`       | `true` se o módulo relé aciona em nível lógico baixo (padrão dos SRD-05VDC-SL-C comuns) |
+| `canal_branca`           | Canal PCA9685 da lâmpada branca (normal)           |
+| `canal_amarela`          | Canal PCA9685 da lâmpada amarela (atenção)         |
+| `canal_vermelha`         | Canal PCA9685 da lâmpada vermelha (alerta)         |
+| `canal_sirene`           | Canal PCA9685 da sirene                            |
+| `rele_ativo_baixo`       | `true` se os módulos relé acionam em nível lógico baixo (padrão dos SRD-05VDC-SL-C comuns) |
 
 ## Atualização automática
 
@@ -102,16 +109,17 @@ journalctl -u viggio-portaria -f
 journalctl -u viggio-kiosk -f
 ```
 
-Estados: `normal` = vermelha ligada (fixa), `atencao` = vermelha piscando,
-`alerta` = branca ligada (fixa), `offline` = tudo apagado (sem conexão com o
-backend).
+Estados: `normal` = branca ligada, `atencao` = amarela ligada, `alerta` =
+vermelha ligada, `offline` = tudo apagado (sem conexão com o backend) —
+nenhum pisca. Sirene liga/desliga por comando manual, só válido durante
+`alerta`.
 
 ## Estrutura
 
 ```
 viggio-portaria/
 ├── main.py                  # processo principal (polling + controle LED)
-├── led_controller.py        # controle PCA9685 / relé (lâmpada branca+vermelha)
+├── led_controller.py        # controle PCA9685 / relés (lâmpadas + sirene)
 ├── audio.py                 # sons de alerta
 ├── config.py                # loader/saver de config.json
 ├── config.example.json      # template de config
