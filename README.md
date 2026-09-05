@@ -138,11 +138,11 @@ mapeamento certo em `config.json`, use a tela de calibração:
 sudo systemctl stop viggio-portaria   # libera o PCA9685
 venv/bin/python calibrar.py
 ```
-Acesse `http://<ip-do-pi>:8000` pelo celular/notebook na mesma rede (ou pela
-própria touchscreen), clique em "Testar" em cada canal, anote o que acende,
-escolha a função (branca/vermelha/amarela/buzzer/sirene/livre) e clique em
-"Salvar configuração" — grava direto em `config.json`, sem editar nada à
-mão. Depois:
+Abre sozinho no navegador da touchscreen; de outro aparelho na mesma rede,
+acesse `http://<ip-do-pi>:8000`. Clique em "Testar" em cada canal, anote o
+que acende, escolha a função (branca/vermelha/amarela/buzzer/sirene/livre) e
+clique em "Salvar configuração" — grava direto em `config.json`, sem editar
+nada à mão. Depois:
 ```bash
 sudo systemctl start viggio-portaria
 ```

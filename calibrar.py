@@ -11,10 +11,13 @@ JSON à mão.
 Uso:
     sudo systemctl stop viggio-portaria   # libera o PCA9685
     venv/bin/python calibrar.py
-    # acesse http://<ip-do-pi>:8000 pelo celular/notebook ou pela touchscreen
+    # abre sozinho no navegador da touchscreen; de outro aparelho na mesma
+    # rede, acesse http://<ip-do-pi>:8000
     sudo systemctl start viggio-portaria  # depois de salvar
 """
+import threading
 import time
+import webbrowser
 
 from flask import Flask, request, jsonify, render_template_string
 from adafruit_pca9685 import PCA9685
@@ -200,7 +203,15 @@ def salvar_rota():
     return jsonify(ok=True)
 
 
+def abrir_navegador():
+    try:
+        webbrowser.open('http://127.0.0.1:8000')
+    except Exception:
+        pass  # sem navegador local (ex.: rodando via SSH sem display) — segue só pela rede
+
+
 if __name__ == '__main__':
+    threading.Timer(1.0, abrir_navegador).start()
     try:
         app.run(host='0.0.0.0', port=8000)
     finally:
