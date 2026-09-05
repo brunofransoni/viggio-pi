@@ -11,11 +11,12 @@ DEFAULTS = {
     'update_check_interval': 1800,  # segundos entre checagens de atualização (30 min)
     'pwa_url': 'https://app.viggiotech.com.br',
     'volume_alerta': 80,     # 0-100
-    # PCA9685 -> relés de 2 canais -> lâmpada branca/amarela/vermelha + sirene
+    # PCA9685 -> 3 placas de relé de 2 canais -> branca/vermelha/amarela/buzzer/sirene
     'canal_branca':    0,
-    'canal_amarela':   1,
-    'canal_vermelha':  2,
-    'canal_sirene':    3,
+    'canal_vermelha':  1,
+    'canal_amarela':   2,
+    'canal_buzzer':    3,
+    'canal_sirene':    4,
     'rele_ativo_baixo': True,  # SRD-05VDC-SL-C tipicamente aciona em nível baixo
 }
 

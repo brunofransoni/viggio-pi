@@ -1,31 +1,50 @@
 # viggio-portaria
 
 Software que roda no Raspberry Pi 5 do **Poste Sentinela**. Faz polling no
-backend Viggio Tech, aciona três lâmpadas (branca/amarela/vermelha) e uma
-sirene via relés comandados pelo PCA9685, toca sons de alerta e sobe o
-Chromium em modo kiosk apontando para o PWA do porteiro.
+backend Viggio Tech, aciona três lâmpadas (branca/amarela/vermelha), um
+buzzer e uma sirene via relés comandados pelo PCA9685, toca sons de alerta e
+sobe o Chromium em modo kiosk apontando para o PWA do porteiro.
 
 ## Hardware
 
 - Raspberry Pi 5 (lado lógico, 5V DC)
 - 2× câmeras USB (CAM1/CAM2)
 - PCA9685 via I2C (SDA/SCL/3.3V/GND do Pi)
-- 2× módulos relé de 2 canais (SRD-05VDC-SL-C ou equivalente, tipicamente
-  **ativo em nível baixo** — sinal LOW energiza o relé) — 4 canais ao todo:
-  - PCA9685 PWM0 → lâmpada **branca**
-  - PCA9685 PWM1 → lâmpada **amarela**
-  - PCA9685 PWM2 → lâmpada **vermelha**
-  - PCA9685 PWM3 → **sirene**
+- 3× módulos relé de 2 canais (SRD-05VDC-SL-C ou equivalente, tipicamente
+  **ativo em nível baixo** — sinal LOW energiza o relé), 6 canais ao todo,
+  todos usando o contato **NO** (Normalmente Aberto) — o dispositivo só liga
+  quando o controlador energiza o relé; em repouso fica tudo desligado. O NC
+  de cada relé fica livre:
+  - Placa 1, Relé 1 → lâmpada **branca**
+  - Placa 1, Relé 2 → lâmpada **vermelha**
+  - Placa 2, Relé 1 → lâmpada **amarela**
+  - Placa 2, Relé 2 → **buzzer**
+  - Placa 3, Relé 1 → **sirene**
+  - Placa 3, Relé 2 → livre (expansão futura)
+
+  Esses são os canais PCA9685 de fábrica (`config.example.json`); a ordem
+  real de cada instalação pode variar conforme a fiação — use a tela de
+  calibração (`calibrar.py`, ver abaixo) pra ajustar sem editar JSON à mão.
 - Lado de potência (110/220V AC) isolado do lado lógico: fase passa pelo
-  disjuntor até o COM de cada relé; NO alimenta cada lâmpada/sirene; neutro
-  vai direto às cargas
+  disjuntor até o COM de cada relé; NO alimenta cada lâmpada/buzzer/sirene;
+  neutro vai direto às cargas
 - Touchscreen HDMI 7" (1024x600)
 - Rede cabeada até o backend (Hetzner)
 
-Só o **relé liga/desliga** — não existe mistura de cor como numa fita RGB, e
-nenhum estado pisca. Cada um dos 4 estados lógicos (`normal`/`atencao`/
-`alerta`/`offline`) acende exatamente uma lâmpada fixa (ou nenhuma, no caso
-de `offline`) — ver `led_controller.py`. A sirene é independente do estado:
+Só o **relé liga/desliga** — não existe mistura de cor como numa fita RGB.
+Ver `led_controller.py` para os 4 estados lógicos:
+
+| Estado    | Branca            | Vermelha          | Amarela | Buzzer |
+|-----------|-------------------|--------------------|---------|--------|
+| `normal`  | fixa ligada       | apagada            | apagada | desligado |
+| `atencao` | apagada           | apagada            | fixa ligada | ligado |
+| `alerta`  | alternando c/ vermelha (nunca as duas juntas nem as duas apagadas) | alternando c/ branca | apagada | ligado |
+| `offline` | apagada           | apagada            | apagada | desligado |
+
+O buzzer segue o estado automaticamente (ligado em `atencao`/`alerta`, só
+desliga em `normal`) — sem nada pra configurar no relé além do liga/desliga,
+a lógica de tempo é toda em software (o backend volta o estado pra `normal`
+sozinho depois de 60s sem novo evento). A sirene é independente do estado:
 só liga por comando manual (porteiro/admin), e só enquanto o estado for
 `alerta` — o backend força a sirene a desligar assim que o estado muda.
 
@@ -67,9 +86,10 @@ sudo reboot
 | `update_check_interval`  | Intervalo entre checagens de atualização, em segundos |
 | `pwa_url`                | URL do PWA aberto no kiosk                         |
 | `volume_alerta`          | Volume dos sons de alerta (0-100)                  |
-| `canal_branca`           | Canal PCA9685 da lâmpada branca (normal)           |
+| `canal_branca`           | Canal PCA9685 da lâmpada branca (normal / alterna no alerta) |
+| `canal_vermelha`         | Canal PCA9685 da lâmpada vermelha (alterna no alerta)  |
 | `canal_amarela`          | Canal PCA9685 da lâmpada amarela (atenção)         |
-| `canal_vermelha`         | Canal PCA9685 da lâmpada vermelha (alerta)         |
+| `canal_buzzer`           | Canal PCA9685 do buzzer (atenção/alerta)           |
 | `canal_sirene`           | Canal PCA9685 da sirene                            |
 | `rele_ativo_baixo`       | `true` se os módulos relé acionam em nível lógico baixo (padrão dos SRD-05VDC-SL-C comuns) |
 
@@ -109,29 +129,39 @@ journalctl -u viggio-portaria -f
 journalctl -u viggio-kiosk -f
 ```
 
-Se as lâmpadas não baterem com o esperado (cor errada acendendo, ou mais de
-uma coisa ligando junto), pare o `viggio-portaria` e rode o diagnóstico de
-canais — liga um canal do PCA9685 por vez pra você anotar visualmente o que
-cada número realmente aciona, sem depender do backend:
+## Calibração dos canais (instalação)
+
+Cada instalação pode ter os 6 canais em ordem diferente, dependendo de como
+o eletricista ligou cada placa de relé. Pra descobrir e já salvar o
+mapeamento certo em `config.json`, use a tela de calibração:
+```bash
+sudo systemctl stop viggio-portaria   # libera o PCA9685
+venv/bin/python calibrar.py
+```
+Acesse `http://<ip-do-pi>:8000` pelo celular/notebook na mesma rede (ou pela
+própria touchscreen), clique em "Testar" em cada canal, anote o que acende,
+escolha a função (branca/vermelha/amarela/buzzer/sirene/livre) e clique em
+"Salvar configuração" — grava direto em `config.json`, sem editar nada à
+mão. Depois:
+```bash
+sudo systemctl start viggio-portaria
+```
+
+Se preferir o diagnóstico bruto sem tela (liga um canal por vez, você só
+anota o que acendeu):
 ```bash
 sudo systemctl stop viggio-portaria
 python3 testar_canais.py
 ```
-Ajuste `canal_branca`/`canal_amarela`/`canal_vermelha`/`canal_sirene` em
-`config.json` conforme o que você observar, depois `sudo systemctl start
-viggio-portaria`.
-
-Estados: `normal` = branca ligada, `atencao` = amarela ligada, `alerta` =
-vermelha ligada, `offline` = tudo apagado (sem conexão com o backend) —
-nenhum pisca. Sirene liga/desliga por comando manual, só válido durante
-`alerta`.
 
 ## Estrutura
 
 ```
 viggio-portaria/
 ├── main.py                  # processo principal (polling + controle LED)
-├── led_controller.py        # controle PCA9685 / relés (lâmpadas + sirene)
+├── led_controller.py        # controle PCA9685 / relés (lâmpadas + buzzer + sirene)
+├── calibrar.py              # tela web de calibração dos canais (instalação)
+├── testar_canais.py         # diagnóstico bruto de canais (fallback sem tela)
 ├── audio.py                 # sons de alerta
 ├── config.py                # loader/saver de config.json
 ├── config.example.json      # template de config
@@ -139,5 +169,6 @@ viggio-portaria/
 ├── install.sh               # instalação completa no Pi 5
 ├── viggio-portaria.service  # serviço systemd do processo principal
 ├── viggio-kiosk.service     # serviço systemd do kiosk
+├── tests/                   # testes com PCA9685 simulado
 └── requirements.txt
 ```

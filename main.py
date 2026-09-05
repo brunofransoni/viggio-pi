@@ -28,8 +28,8 @@ log = logging.getLogger('viggio')
 
 config = carregar()
 led = LEDController(
-    config['canal_branca'], config['canal_amarela'], config['canal_vermelha'],
-    config['canal_sirene'], config['rele_ativo_baixo'],
+    config['canal_branca'], config['canal_vermelha'], config['canal_amarela'],
+    config['canal_buzzer'], config['canal_sirene'], config['rele_ativo_baixo'],
 )
 
 estado_anterior = None

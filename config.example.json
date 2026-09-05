@@ -6,8 +6,9 @@
   "pwa_url": "https://app.viggiotech.com.br",
   "volume_alerta": 80,
   "canal_branca": 0,
-  "canal_amarela": 1,
-  "canal_vermelha": 2,
-  "canal_sirene": 3,
+  "canal_vermelha": 1,
+  "canal_amarela": 2,
+  "canal_buzzer": 3,
+  "canal_sirene": 4,
   "rele_ativo_baixo": true
 }

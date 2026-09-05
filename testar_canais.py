@@ -7,15 +7,18 @@ realmente aciona. Não depende do backend nem do main.py.
 Uso:
     python3 testar_canais.py
 
-Edite CANAIS_PARA_TESTAR se seu hardware usar mais/menos de 4 canais, ou
+Edite CANAIS_PARA_TESTAR se seu hardware usar mais/menos de 6 canais, ou
 ATIVO_BAIXO se `rele_ativo_baixo` no seu config.json for diferente de true.
+
+Pra calibração guiada com tela e gravação automática em config.json, use
+calibrar.py — este script aqui é só o diagnóstico bruto de fallback.
 """
 import time
 from adafruit_pca9685 import PCA9685
 from board import SCL, SDA
 import busio
 
-CANAIS_PARA_TESTAR = [0, 1, 2, 3]
+CANAIS_PARA_TESTAR = [0, 1, 2, 3, 4, 5]
 ATIVO_BAIXO = True
 SEGUNDOS_POR_CANAL = 5
 
