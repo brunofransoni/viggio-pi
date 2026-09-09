@@ -38,6 +38,26 @@ estado_anterior = None
 sirene_anterior = False
 estado_lock = threading.Lock()
 
+# Marca o instante (epoch ms, gerado pelo backend) do último estado
+# efetivamente aplicado. Como agora tem dois canais chegando em paralelo
+# (polling HTTP e push via socket), uma resposta de heartbeat que estava "em
+# voo" antes de um clique manual pode chegar DEPOIS do push que já aplicou a
+# mudança — sem isso, essa resposta atrasada reaplicaria o valor antigo por
+# cima. `ts=None` (heartbeat de uma versão antiga do backend, ou o próprio
+# 'offline' local) sempre aplica, sem essa checagem.
+ultimo_ts_aplicado = 0
+
+
+def aplicar_se_mais_recente(estado, sirene, ts):
+    global ultimo_ts_aplicado
+    with estado_lock:
+        if ts is not None and ts <= ultimo_ts_aplicado:
+            log.debug(f'Ignorando estado atrasado (ts={ts} <= último aplicado {ultimo_ts_aplicado})')
+            return
+        if ts is not None:
+            ultimo_ts_aplicado = ts
+        processar_estado(estado, sirene)
+
 # Canal push (Socket.IO) além do polling — reage quase instantaneamente a
 # mudanças manuais/alertas, sem esperar o próximo ciclo. O polling continua
 # rodando como rede de segurança (heartbeat de online + retorno automático a
@@ -61,8 +81,7 @@ def disconnect():
 
 @sio.on('poste_estado')
 def ao_receber_estado(dados):
-    with estado_lock:
-        processar_estado(dados.get('estado', 'normal'), dados.get('sirene', False))
+    aplicar_se_mais_recente(dados.get('estado', 'normal'), dados.get('sirene', False), dados.get('ts'))
 
 def conectar_socket():
     try:
@@ -82,7 +101,7 @@ def obter_ip_local():
         s.close()
 
 def consultar_backend():
-    """Consulta o backend e retorna (estadoLampada, sirene)."""
+    """Consulta o backend e retorna (estadoLampada, sirene, ts)."""
     try:
         resposta = requests.post(
             f"{config['api_url']}/api/postes/heartbeat",
@@ -99,15 +118,15 @@ def consultar_backend():
         )
         if resposta.ok:
             dados = resposta.json()
-            return dados.get('estadoLampada', 'normal'), dados.get('sirene', False)
+            return dados.get('estadoLampada', 'normal'), dados.get('sirene', False), dados.get('ts')
         log.warning(f'Backend respondeu com status {resposta.status_code}')
-        return 'offline', False
+        return 'offline', False, None
     except requests.exceptions.ConnectionError:
         log.warning('Sem conexão com o backend')
-        return 'offline', False
+        return 'offline', False, None
     except Exception as e:
         log.error(f'Erro ao consultar backend: {e}')
-        return 'offline', False
+        return 'offline', False, None
 
 def processar_estado(estado, sirene):
     """Aplica mudanças quando o estado ou a sirene mudam."""
@@ -182,9 +201,8 @@ def main():
     proxima_verificacao_update = time.time() + config['update_check_interval']
 
     while True:
-        estado, sirene = consultar_backend()
-        with estado_lock:
-            processar_estado(estado, sirene)
+        estado, sirene, ts = consultar_backend()
+        aplicar_se_mais_recente(estado, sirene, ts)
 
         if not sio.connected:
             conectar_socket()
