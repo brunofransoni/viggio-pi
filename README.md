@@ -93,6 +93,13 @@ sudo reboot
 | `canal_sirene`           | Canal PCA9685 da sirene                            |
 | `rele_ativo_baixo`       | `true` se os módulos relé acionam em nível lógico baixo (padrão dos SRD-05VDC-SL-C comuns) |
 
+## Comunicação com o backend
+
+Duas camadas, rodando ao mesmo tempo:
+
+- **Polling HTTP** (`consultar_backend()`, a cada `polling_interval` segundos) — é quem mantém o poste marcado como online (`ultimoHeartbeat`) e quem garante o retorno automático a `normal` depois de 60s sem novo evento. Rede de segurança: mesmo se o socket cair, o estado eventualmente converge sozinho no próximo ciclo.
+- **Push em tempo real** (Socket.IO, mesma chave de API do heartbeat) — o `main.py` mantém uma conexão persistente com o backend; qualquer mudança manual (LED forçado, sirene) ou alerta real chega em menos de 1 segundo, sem esperar o próximo ciclo de polling. Reconecta sozinho se cair (`journalctl -u viggio-portaria -f` deve mostrar "Socket em tempo real conectado" no boot).
+
 ## Atualização automática
 
 `main.py` confere periodicamente (a cada `update_check_interval` segundos,
