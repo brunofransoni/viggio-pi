@@ -10,8 +10,10 @@ Uso:
 Edite CANAIS_PARA_TESTAR se seu hardware usar mais/menos de 6 canais, ou
 ATIVO_BAIXO se `rele_ativo_baixo` no seu config.json for diferente de true.
 
-Pra calibração guiada com tela e gravação automática em config.json, use
-calibrar.py — este script aqui é só o diagnóstico bruto de fallback.
+Pra calibração guiada com tela e gravação automática em config.json (e pra
+polaridade por canal, quando há relés misturados tipo SSR + mecânico), use
+calibrar.py — este script aqui é só o diagnóstico bruto de fallback, com
+uma polaridade só (ATIVO_BAIXO) pra todos os canais.
 """
 import time
 from adafruit_pca9685 import PCA9685

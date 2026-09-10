@@ -4,9 +4,10 @@ Tela de calibração dos canais — pra usar na instalação física de cada pos
 
 Sobe uma página web local (não é um serviço permanente) onde o instalador
 liga um canal do PCA9685 por vez, anota visualmente o que acende, atribui a
-função (branca/vermelha/amarela/buzzer/sirene/livre) e salva direto em
-config.json — substitui o fluxo manual de rodar testar_canais.py e editar o
-JSON à mão.
+função (branca/vermelha/amarela/buzzer/sirene/livre), ajusta a polaridade
+(ativo em nível baixo, canal a canal — necessário quando há relés
+misturados, ex.: SSR em alguns canais e relé mecânico no resto) e salva
+direto em config.json.
 
 Antes de mostrar a tela de calibração, faz uma varredura do barramento I2C
 (equivalente ao `i2cdetect -y 1`) e confere se o PCA9685 responde — se não
@@ -58,7 +59,14 @@ pca = None
 erro_pca = None
 
 config = carregar()
-ativo_baixo = config['rele_ativo_baixo']
+
+
+def canal_ativo_baixo_config(canal):
+    """Polaridade efetiva de um canal conforme o config.json atual."""
+    val = config.get('rele_ativo_baixo', True)
+    if isinstance(val, list):
+        return canal in val
+    return bool(val)
 
 
 def escanear_barramento():
@@ -86,15 +94,23 @@ def conectar_pca9685():
 conectar_pca9685()
 
 
-def escrever(canal, ligado):
+def escrever(canal, ligado, ativo_baixo):
     nivel_ligado = 0 if ativo_baixo else 65535
     nivel_desligado = 65535 if ativo_baixo else 0
     pca.channels[canal].duty_cycle = nivel_ligado if ligado else nivel_desligado
 
 
-def tudo_desligado():
+def tudo_desligado(ativo_baixo_por_canal):
+    """ativo_baixo_por_canal: iterável com os canais que são ativo em nível baixo."""
+    baixo = set(ativo_baixo_por_canal)
     for c in range(NUM_CANAIS):
-        escrever(c, False)
+        escrever(c, False, c in baixo)
+
+
+def polaridade_do_request():
+    """Lista de canais ativo-baixo vinda do corpo do request (estado dos checkboxes)."""
+    corpo = request.get_json(silent=True) or {}
+    return [int(c) for c in corpo.get('polaridade', [])]
 
 
 def mapeamento_atual():
@@ -160,11 +176,15 @@ PAGINA = """
   .conexao.ok { background: #14532d; color: #4ade80; }
   table { width: 100%; border-collapse: collapse; }
   td, th { padding: 0.6rem 0.5rem; border-bottom: 1px solid #334155; text-align: left; }
+  th { font-weight: 600; font-size: 0.8rem; color: #94a3b8; }
   select { background: #1e293b; color: #e2e8f0; border: 1px solid #475569; border-radius: 6px; padding: 0.4rem; font-size: 1rem; }
+  label.pol { display: flex; align-items: center; gap: 0.4rem; font-size: 0.85rem; color: #cbd5e1; }
+  label.pol input { width: 1.1rem; height: 1.1rem; }
   button { background: #334155; color: #e2e8f0; border: 1px solid #475569; border-radius: 6px; padding: 0.5rem 1rem; font-size: 0.95rem; cursor: pointer; }
   button:hover { background: #475569; }
   button.testando { background: #b45309; border-color: #d97706; }
-  #salvar { background: #16a34a; border-color: #15803d; font-weight: 600; margin-top: 1.5rem; padding: 0.7rem 1.4rem; }
+  .acoes { margin-top: 1.25rem; display: flex; gap: 0.75rem; flex-wrap: wrap; }
+  #salvar { background: #16a34a; border-color: #15803d; font-weight: 600; padding: 0.7rem 1.4rem; }
   #salvar:hover { background: #15803d; }
   #status { margin-top: 1rem; font-size: 0.9rem; min-height: 1.2rem; }
   #status.ok { color: #4ade80; }
@@ -174,9 +194,13 @@ PAGINA = """
 <body>
   <h1>Calibração dos canais — Poste Sentinela</h1>
   <div class="conexao ok">✓ PCA9685 conectado em 0x{{ '%02x' % endereco }}</div>
-  <p class="sub">Clique em "Testar" pra ligar aquele canal por {{ segundos }}s, anote o que acendeu, escolha a função e salve no final.</p>
+  <p class="sub">
+    "Testar" liga o canal por {{ segundos }}s — anote o que acendeu e escolha a função.
+    Se o canal ligar quando devia desligar (ou vice-versa), marque "ativo em nível baixo" e teste de novo.
+    Use "Desligar tudo" pra conferir que em repouso fica tudo apagado. No fim, "Salvar".
+  </p>
   <table>
-    <tr><th>Canal</th><th></th><th>Função</th></tr>
+    <tr><th>Canal</th><th></th><th>Função</th><th>Polaridade</th></tr>
     {% for c in range(num_canais) %}
     <tr>
       <td>Canal {{ c }}</td>
@@ -188,19 +212,42 @@ PAGINA = """
           {% endfor %}
         </select>
       </td>
+      <td>
+        <label class="pol">
+          <input type="checkbox" id="pol-{{ c }}" {{ 'checked' if polaridade[c] else '' }}>
+          ativo em nível baixo
+        </label>
+      </td>
     </tr>
     {% endfor %}
   </table>
-  <button id="salvar" onclick="salvarConfig()">Salvar configuração</button>
+  <div class="acoes">
+    <button type="button" onclick="desligarTudo()">Desligar tudo</button>
+    <button id="salvar" onclick="salvarConfig()">Salvar configuração</button>
+  </div>
   <div id="status"></div>
 
 <script>
+const NUM = {{ num_canais }};
+
+function polaridadeAtual() {
+  const lista = [];
+  for (let c = 0; c < NUM; c++) {
+    if (document.getElementById(`pol-${c}`).checked) lista.push(c);
+  }
+  return lista;
+}
+
 async function testar(canal, botao) {
   botao.classList.add('testando');
   botao.disabled = true;
   botao.textContent = 'Ligado...';
   try {
-    await fetch(`/testar/${canal}`, { method: 'POST' });
+    await fetch(`/testar/${canal}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ polaridade: polaridadeAtual() }),
+    });
   } finally {
     botao.classList.remove('testando');
     botao.disabled = false;
@@ -208,16 +255,27 @@ async function testar(canal, botao) {
   }
 }
 
+async function desligarTudo() {
+  const status = document.getElementById('status');
+  await fetch('/desligar', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ polaridade: polaridadeAtual() }),
+  });
+  status.className = 'ok';
+  status.textContent = 'Todos os canais desligados — confira se o totem ficou totalmente apagado.';
+}
+
 async function salvarConfig() {
   const status = document.getElementById('status');
   const mapeamento = {};
-  for (let c = 0; c < {{ num_canais }}; c++) {
+  for (let c = 0; c < NUM; c++) {
     mapeamento[c] = document.getElementById(`funcao-${c}`).value;
   }
   const resposta = await fetch('/salvar', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ mapeamento }),
+    body: JSON.stringify({ mapeamento, polaridade: polaridadeAtual() }),
   });
   const dados = await resposta.json();
   if (resposta.ok) {
@@ -247,10 +305,12 @@ def index():
             enderecos=', '.join(f'0x{a:02x}' for a in enderecos),
         )
 
-    tudo_desligado()
+    polaridade = {c: canal_ativo_baixo_config(c) for c in range(NUM_CANAIS)}
+    tudo_desligado([c for c in range(NUM_CANAIS) if polaridade[c]])
     return render_template_string(
         PAGINA, num_canais=NUM_CANAIS, funcoes=FUNCOES,
-        mapa=mapeamento_atual(), segundos=SEGUNDOS_TESTE, endereco=ENDERECO_PCA9685,
+        mapa=mapeamento_atual(), polaridade=polaridade,
+        segundos=SEGUNDOS_TESTE, endereco=ENDERECO_PCA9685,
     )
 
 
@@ -260,10 +320,19 @@ def testar(canal):
         return jsonify(erro='PCA9685 não está conectado — recarregue a página.'), 503
     if not 0 <= canal < NUM_CANAIS:
         return jsonify(erro='Canal inválido'), 400
-    tudo_desligado()
-    escrever(canal, True)
+    ativo_baixo = polaridade_do_request()
+    tudo_desligado(ativo_baixo)
+    escrever(canal, True, canal in ativo_baixo)
     time.sleep(SEGUNDOS_TESTE)
-    escrever(canal, False)
+    escrever(canal, False, canal in ativo_baixo)
+    return jsonify(ok=True)
+
+
+@app.route('/desligar', methods=['POST'])
+def desligar():
+    if pca is None:
+        return jsonify(erro='PCA9685 não está conectado — recarregue a página.'), 503
+    tudo_desligado(polaridade_do_request())
     return jsonify(ok=True)
 
 
@@ -272,7 +341,8 @@ def salvar_rota():
     if pca is None:
         return jsonify(erro='PCA9685 não está conectado — recarregue a página.'), 503
 
-    mapeamento = request.get_json(force=True).get('mapeamento', {})
+    corpo = request.get_json(force=True)
+    mapeamento = corpo.get('mapeamento', {})
 
     canal_por_funcao = {}
     for canal_str, funcao in mapeamento.items():
@@ -286,8 +356,17 @@ def salvar_rota():
     if faltando:
         return jsonify(erro=f'Funções sem canal atribuído: {", ".join(faltando)}'), 400
 
+    ativo_baixo = sorted({int(c) for c in corpo.get('polaridade', []) if 0 <= int(c) < NUM_CANAIS})
+    if not ativo_baixo:
+        rele_ativo_baixo = False
+    elif len(ativo_baixo) == NUM_CANAIS:
+        rele_ativo_baixo = True
+    else:
+        rele_ativo_baixo = ativo_baixo
+
     config_atual = carregar()
     config_atual.update(canal_por_funcao)
+    config_atual['rele_ativo_baixo'] = rele_ativo_baixo
     salvar(config_atual)
 
     global config
@@ -309,4 +388,4 @@ if __name__ == '__main__':
         app.run(host='0.0.0.0', port=8000)
     finally:
         if pca is not None:
-            tudo_desligado()
+            tudo_desligado([c for c in range(NUM_CANAIS) if canal_ativo_baixo_config(c)])

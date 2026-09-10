@@ -25,6 +25,12 @@ sobe o Chromium em modo kiosk apontando para o PWA do porteiro.
   Esses são os canais PCA9685 de fábrica (`config.example.json`); a ordem
   real de cada instalação pode variar conforme a fiação — use a tela de
   calibração (`calibrar.py`, ver abaixo) pra ajustar sem editar JSON à mão.
+- **Relés misturados no mesmo PCA9685** (ex.: SSR em alguns canais, relé
+  mecânico no resto) disparam com lógica oposta. O `rele_ativo_baixo` aceita
+  tanto um bool (mesma polaridade pra todos) quanto uma **lista** de canais
+  ativo-baixo (ex.: `[0, 1]` = canais 0 e 1 ativo-baixo, o resto ativo-alto).
+  O `calibrar.py` tem um checkbox de polaridade por canal e salva isso
+  sozinho.
 - Lado de potência (110/220V AC) isolado do lado lógico: fase passa pelo
   disjuntor até o COM de cada relé; NO alimenta cada lâmpada/buzzer/sirene;
   neutro vai direto às cargas
@@ -91,7 +97,7 @@ sudo reboot
 | `canal_amarela`          | Canal PCA9685 da lâmpada amarela (atenção)         |
 | `canal_buzzer`           | Canal PCA9685 do buzzer (atenção/alerta)           |
 | `canal_sirene`           | Canal PCA9685 da sirene                            |
-| `rele_ativo_baixo`       | `true` se os módulos relé acionam em nível lógico baixo (padrão dos SRD-05VDC-SL-C comuns) |
+| `rele_ativo_baixo`       | `true`/`false` = polaridade única pra todos os canais; ou lista de canais ativo-baixo (ex.: `[0, 1]`) pra relés misturados. Ajustável pelo `calibrar.py`. |
 
 ## Comunicação com o backend
 
@@ -146,13 +152,26 @@ sudo systemctl stop viggio-portaria   # libera o PCA9685
 venv/bin/python calibrar.py
 ```
 Abre sozinho no navegador da touchscreen; de outro aparelho na mesma rede,
-acesse `http://<ip-do-pi>:8000`. Clique em "Testar" em cada canal, anote o
-que acende, escolha a função (branca/vermelha/amarela/buzzer/sirene/livre) e
-clique em "Salvar configuração" — grava direto em `config.json`, sem editar
-nada à mão. Depois:
+acesse `http://<ip-do-pi>:8000`. Pra cada canal:
+
+1. "Testar" liga o canal por alguns segundos — anote qual lâmpada/buzzer/
+   sirene acendeu e escolha a função no dropdown.
+2. Se o canal ligar quando devia desligar (ou nunca apagar), marque **"ativo
+   em nível baixo"** e teste de novo — serve pra relés misturados (ex.: SSR
+   num canal, relé mecânico noutro), que disparam com lógica oposta.
+3. "Desligar tudo" desliga todos os canais respeitando os checkboxes — use
+   pra confirmar que em repouso o totem fica **totalmente apagado**.
+
+No fim, "Salvar configuração" grava o mapa de canais **e** a polaridade em
+`config.json`, sem editar nada à mão. Depois:
 ```bash
 sudo systemctl start viggio-portaria
 ```
+
+Se uma lâmpada continuar errada (ex.: acende junto com outra, ou não apaga)
+mesmo testando as duas polaridades, aí não é software — é fiação/relé
+(SSR em curto, ou fio quente da lâmpada fora do relé). Nesse caso a saída de
+cada relé tem que alimentar **uma** carga só, pelo contato NO.
 
 Se preferir o diagnóstico bruto sem tela (liga um canal por vez, você só
 anota o que acendeu):

@@ -17,7 +17,10 @@ DEFAULTS = {
     'canal_amarela':   2,
     'canal_buzzer':    3,
     'canal_sirene':    4,
-    'rele_ativo_baixo': True,  # SRD-05VDC-SL-C tipicamente aciona em nível baixo
+    # bool = mesma polaridade pra todos os canais (SRD-05VDC-SL-C comum liga
+    # em nível baixo). list[int] = canais ativo-baixo, o resto ativo-alto —
+    # pra relés misturados no mesmo PCA9685 (ex.: [0, 1] p/ SSR nesses canais).
+    'rele_ativo_baixo': True,
 }
 
 def carregar():

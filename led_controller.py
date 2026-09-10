@@ -11,9 +11,14 @@ class LEDController:
     """
     Poste Sentinela: 3 placas de relé de 2 canais (6 canais no total, contato
     NO) — branca, vermelha, amarela, buzzer e sirene, mais um canal livre
-    para expansão futura. Módulos SRD-05VDC-SL-C tipicamente são "ativo em
-    nível baixo" (sinal LOW energiza a bobina) — ajustável via `ativo_baixo`
-    caso o módulo seja o contrário.
+    para expansão futura.
+
+    `ativo_baixo` diz em que nível lógico o relé/SSR liga:
+    - bool: mesma polaridade pra todos os canais (relé mecânico SRD-05VDC
+      comum costuma ser True — sinal LOW energiza).
+    - list[int]: canais PCA9685 que são ativo em nível baixo; os demais são
+      ativo em nível alto. Serve pra instalações com relés misturados no
+      mesmo PCA9685 (ex.: SSR nos canais 0/1, relé mecânico no resto).
     """
     def __init__(self, canal_branca=0, canal_vermelha=1, canal_amarela=2, canal_buzzer=3, canal_sirene=4, ativo_baixo=True):
         i2c = busio.I2C(SCL, SDA)
@@ -28,9 +33,15 @@ class LEDController:
         self._thread_alternancia = None
         self._parar_alternancia = threading.Event()
 
+    def _ativo_baixo(self, canal):
+        if isinstance(self.ativo_baixo, (list, tuple, set)):
+            return canal in self.ativo_baixo
+        return bool(self.ativo_baixo)
+
     def _escrever(self, canal, ligado):
-        nivel_ligado = 0 if self.ativo_baixo else 65535
-        nivel_desligado = 65535 if self.ativo_baixo else 0
+        ativo_baixo = self._ativo_baixo(canal)
+        nivel_ligado = 0 if ativo_baixo else 65535
+        nivel_desligado = 65535 if ativo_baixo else 0
         self.pca.channels[canal].duty_cycle = nivel_ligado if ligado else nivel_desligado
 
     def _parar_thread_alternancia(self):

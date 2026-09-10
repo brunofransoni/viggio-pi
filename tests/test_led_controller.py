@@ -43,8 +43,9 @@ CANAIS_FAKE = _instalar_stubs_hardware()
 from led_controller import LEDController  # noqa: E402
 
 
-def _ligado(canal):
-    return CANAIS_FAKE[canal].duty_cycle == 0  # ativo_baixo=True nos testes
+def _ligado(canal, ativo_baixo=True):
+    nivel_ligado = 0 if ativo_baixo else 65535
+    return CANAIS_FAKE[canal].duty_cycle == nivel_ligado
 
 
 class TestLEDController(unittest.TestCase):
@@ -123,6 +124,62 @@ class TestLEDController(unittest.TestCase):
         self.assertFalse(_ligado(1))
         self.assertFalse(_ligado(3))
         self.assertFalse(_ligado(4))
+
+
+class TestPolaridadePorCanal(unittest.TestCase):
+    """Relés misturados: canais 0/1 ativo-baixo (SSR), 2/3/4 ativo-alto (mecânico)."""
+
+    def setUp(self):
+        for c in CANAIS_FAKE:
+            c.duty_cycle = None
+        self.led = LEDController(
+            canal_branca=0, canal_vermelha=1, canal_amarela=2,
+            canal_buzzer=3, canal_sirene=4, ativo_baixo=[0, 1],
+        )
+
+    def tearDown(self):
+        self.led._parar_thread_alternancia()
+
+    def test_helper_ativo_baixo_por_canal(self):
+        self.assertTrue(self.led._ativo_baixo(0))
+        self.assertTrue(self.led._ativo_baixo(1))
+        self.assertFalse(self.led._ativo_baixo(2))
+        self.assertFalse(self.led._ativo_baixo(5))
+
+    def test_normal_nivel_certo_por_canal(self):
+        self.led.aplicar_estado('normal')
+        self.assertEqual(CANAIS_FAKE[0].duty_cycle, 0)      # branca ativo-baixo, ligada
+        self.assertEqual(CANAIS_FAKE[1].duty_cycle, 65535)  # vermelha ativo-baixo, apagada
+        self.assertEqual(CANAIS_FAKE[2].duty_cycle, 0)      # amarela ativo-alto, apagada
+        self.assertEqual(CANAIS_FAKE[3].duty_cycle, 0)      # buzzer ativo-alto, apagado
+
+    def test_atencao_nivel_certo_por_canal(self):
+        self.led.aplicar_estado('atencao')
+        self.assertEqual(CANAIS_FAKE[0].duty_cycle, 65535)  # branca ativo-baixo, apagada
+        self.assertEqual(CANAIS_FAKE[2].duty_cycle, 65535)  # amarela ativo-alto, ligada
+        self.assertEqual(CANAIS_FAKE[3].duty_cycle, 65535)  # buzzer ativo-alto, ligado
+
+    def test_offline_apaga_tudo_com_nivel_certo(self):
+        self.led.aplicar_estado('atencao')
+        self.led.aplicar_estado('offline')
+        self.assertEqual(CANAIS_FAKE[0].duty_cycle, 65535)  # ativo-baixo apagado = HIGH
+        self.assertEqual(CANAIS_FAKE[1].duty_cycle, 65535)
+        self.assertEqual(CANAIS_FAKE[2].duty_cycle, 0)      # ativo-alto apagado = LOW
+        self.assertEqual(CANAIS_FAKE[3].duty_cycle, 0)
+
+    def test_sirene_ativo_alto_independente(self):
+        self.led.definir_sirene(True)
+        self.assertEqual(CANAIS_FAKE[4].duty_cycle, 65535)
+        self.led.definir_sirene(False)
+        self.assertEqual(CANAIS_FAKE[4].duty_cycle, 0)
+
+    def test_alerta_alterna_com_niveis_invertidos(self):
+        self.led.aplicar_estado('alerta')
+        for _ in range(6):
+            b, v = CANAIS_FAKE[0].duty_cycle, CANAIS_FAKE[1].duty_cycle
+            # canais 0 e 1 são ativo-baixo: um ligado (0) e o outro apagado (65535)
+            self.assertEqual({b, v}, {0, 65535})
+            time.sleep(0.15)
 
 
 if __name__ == '__main__':
