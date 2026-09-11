@@ -1,9 +1,12 @@
+import logging
 import threading
 import time
 
 from adafruit_pca9685 import PCA9685
 from board import SCL, SDA
 import busio
+
+log = logging.getLogger('viggio')
 
 INTERVALO_ALTERNANCIA = 0.5  # segundos entre branca/vermelha durante o alerta
 
@@ -42,7 +45,16 @@ class LEDController:
         ativo_baixo = self._ativo_baixo(canal)
         nivel_ligado = 0 if ativo_baixo else 65535
         nivel_desligado = 65535 if ativo_baixo else 0
-        self.pca.channels[canal].duty_cycle = nivel_ligado if ligado else nivel_desligado
+        nivel = nivel_ligado if ligado else nivel_desligado
+        try:
+            self.pca.channels[canal].duty_cycle = nivel
+        except OSError as e:
+            # Falha intermitente no barramento I2C (comum com ruído elétrico
+            # de relé/SSR perto da fiação) — loga e segue. Sem isso, uma
+            # falha bem no meio do loop de alternância (_loop_alternancia)
+            # derrubava a thread inteira e travava o canal na última cor que
+            # tinha conseguido escrever, em vez de alternar.
+            log.warning(f'Falha ao escrever no canal {canal} (I2C): {e}')
 
     def _parar_thread_alternancia(self):
         if self._thread_alternancia is not None:

@@ -182,5 +182,62 @@ class TestPolaridadePorCanal(unittest.TestCase):
             time.sleep(0.15)
 
 
+class _CanalComFalhaIntermitente:
+    """Simula um canal do PCA9685 cuja escrita falha uma vez (Remote I/O
+    error), como acontece de vez em quando por ruído elétrico no I2C."""
+    def __init__(self):
+        self._duty_cycle = None
+        self.falhar_na_proxima_escrita = False
+
+    @property
+    def duty_cycle(self):
+        return self._duty_cycle
+
+    @duty_cycle.setter
+    def duty_cycle(self, valor):
+        if self.falhar_na_proxima_escrita:
+            self.falhar_na_proxima_escrita = False
+            raise OSError(121, 'Remote I/O error')
+        self._duty_cycle = valor
+
+
+class TestFalhaIntermitenteI2C(unittest.TestCase):
+    def setUp(self):
+        for c in CANAIS_FAKE:
+            c.duty_cycle = None
+        self.led = LEDController(
+            canal_branca=0, canal_vermelha=1, canal_amarela=2,
+            canal_buzzer=3, canal_sirene=4, ativo_baixo=True,
+        )
+
+    def tearDown(self):
+        self.led._parar_thread_alternancia()
+        self.led.pca.channels[1] = CANAIS_FAKE[1]  # restaura o stub padrão
+
+    def test_falha_pontual_de_i2c_nao_propaga(self):
+        canal_falho = _CanalComFalhaIntermitente()
+        canal_falho.falhar_na_proxima_escrita = True
+        self.led.pca.channels[1] = canal_falho
+
+        self.led._escrever(1, True)  # não deve levantar OSError
+
+    def test_falha_no_meio_do_alerta_nao_trava_a_alternancia(self):
+        canal_falho = _CanalComFalhaIntermitente()
+        self.led.pca.channels[1] = canal_falho
+
+        self.led.aplicar_estado('alerta')
+        time.sleep(0.1)
+        canal_falho.falhar_na_proxima_escrita = True  # derruba UMA escrita no meio do loop
+
+        estados_observados = set()
+        for _ in range(8):
+            estados_observados.add(CANAIS_FAKE[0].duty_cycle)
+            time.sleep(0.15)
+
+        self.assertTrue(self.led._thread_alternancia.is_alive())
+        # mesmo com a falha pontual, a alternância continuou acontecendo
+        self.assertEqual(estados_observados, {0, 65535})
+
+
 if __name__ == '__main__':
     unittest.main()
