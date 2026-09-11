@@ -41,6 +41,8 @@ else
 fi
 
 # Abrir Chromium em modo kiosk — tela cheia, sem barra, sem botões
+# --disk-cache-size limita o cache a ~50MB — sem isso, meses de kiosk sem
+# reiniciar deixam o cache crescer sem controle e ocupar espaço no cartão SD.
 "$CHROMIUM" \
   --kiosk \
   --noerrdialogs \
@@ -52,6 +54,7 @@ fi
   --window-size=1024,600 \
   --touch-events=enabled \
   --enable-touch-drag-drop \
+  --disk-cache-size=52428800 \
   "$URL" &
 
 # Manter o script rodando

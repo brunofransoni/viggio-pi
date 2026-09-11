@@ -4,7 +4,9 @@ After=network-online.target
 Wants=network-online.target
 
 [Service]
-Type=simple
+Type=notify
+NotifyAccess=main
+WatchdogSec=60
 User=__USER__
 WorkingDirectory=__DIR__
 ExecStart=__DIR__/venv/bin/python main.py

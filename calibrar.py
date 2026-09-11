@@ -16,16 +16,20 @@ achar nada, mostra uma tela de diagnóstico em vez de quebrar com traceback.
 Uso:
     sudo systemctl stop viggio-portaria   # libera o PCA9685
     venv/bin/python calibrar.py
+    # mostra um PIN de 6 dígitos no terminal — precisa dele pra entrar na
+    # tela (evita que qualquer aparelho na mesma rede local mexa nos canais
+    # enquanto a ferramenta estiver aberta)
     # abre sozinho no navegador da touchscreen; de outro aparelho na mesma
     # rede, acesse http://<ip-do-pi>:8000
     sudo systemctl start viggio-portaria  # depois de salvar
 """
+import secrets
 import sys
 import threading
 import time
 import webbrowser
 
-from flask import Flask, request, jsonify, render_template_string
+from flask import Flask, request, jsonify, render_template_string, session, redirect
 from adafruit_pca9685 import PCA9685
 from board import SCL, SDA
 import busio
@@ -46,6 +50,13 @@ FUNCOES = {
 }
 
 app = Flask(__name__)
+app.secret_key = secrets.token_hex(16)
+
+# PIN novo a cada execução, só visível pra quem tem acesso ao terminal
+# (físico ou SSH) que rodou o script — sem isso, qualquer aparelho na mesma
+# rede local conseguiria acessar a tela e mexer nos canais do totem enquanto
+# a ferramenta estivesse aberta.
+PIN_ACESSO = f'{secrets.randbelow(1_000_000):06d}'
 
 try:
     i2c = busio.I2C(SCL, SDA)
@@ -135,6 +146,35 @@ def mapeamento_atual():
             mapa[canal] = chave
     return mapa
 
+
+PAGINA_LOGIN = """
+<!doctype html>
+<html lang="pt-br">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Calibração — Poste Sentinela</title>
+<style>
+  body { font-family: system-ui, sans-serif; background: #0f172a; color: #e2e8f0; margin: 0; padding: 1.5rem; max-width: 400px; }
+  h1 { font-size: 1.25rem; margin-bottom: 0.25rem; }
+  p.sub { color: #94a3b8; font-size: 0.9rem; }
+  input { width: 100%; box-sizing: border-box; background: #1e293b; color: #e2e8f0; border: 1px solid #475569; border-radius: 6px; padding: 0.7rem; font-size: 1.4rem; letter-spacing: 0.3rem; text-align: center; margin: 1rem 0; }
+  button { width: 100%; background: #16a34a; border: 1px solid #15803d; color: #e2e8f0; border-radius: 6px; padding: 0.7rem; font-size: 1rem; font-weight: 600; cursor: pointer; }
+  button:hover { background: #15803d; }
+  .erro { color: #f87171; font-size: 0.9rem; }
+</style>
+</head>
+<body>
+  <h1>Calibração dos canais</h1>
+  <p class="sub">Digite o PIN mostrado no terminal onde o <code>calibrar.py</code> foi iniciado.</p>
+  <form method="post" action="/entrar">
+    <input type="text" name="pin" inputmode="numeric" pattern="[0-9]*" maxlength="6" autofocus>
+    <button type="submit">Entrar</button>
+  </form>
+  {% if erro %}<p class="erro">PIN incorreto.</p>{% endif %}
+</body>
+</html>
+"""
 
 PAGINA_ERRO = """
 <!doctype html>
@@ -303,6 +343,21 @@ async function salvarConfig() {
 """
 
 
+@app.before_request
+def exigir_pin():
+    if request.path == '/entrar' or session.get('autenticado'):
+        return None
+    return render_template_string(PAGINA_LOGIN, erro=False), 401
+
+
+@app.route('/entrar', methods=['POST'])
+def entrar():
+    if request.form.get('pin', '') == PIN_ACESSO:
+        session['autenticado'] = True
+        return redirect('/')
+    return render_template_string(PAGINA_LOGIN, erro=True), 401
+
+
 @app.route('/')
 def index():
     if pca is None:
@@ -394,6 +449,7 @@ def abrir_navegador():
 
 
 if __name__ == '__main__':
+    print(f'\n=== PIN de acesso à calibração: {PIN_ACESSO} ===\n')
     threading.Timer(1.0, abrir_navegador).start()
     try:
         app.run(host='0.0.0.0', port=8000)

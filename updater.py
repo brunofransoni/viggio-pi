@@ -43,12 +43,56 @@ def _instalar_dependencias():
         log.error(f'Falha ao instalar dependências: {e}')
         return False
 
+def _commit_atual():
+    return _git('rev-parse', 'HEAD').stdout.strip()
+
+def _codigo_valido():
+    """Confere que os .py do repo pelo menos compilam (pega erro de
+    sintaxe/import óbvio) antes de deixar o serviço reiniciar pra essa
+    versão. Não executa o código nem toca no hardware/I2C que o processo
+    atual já está usando — só valida a sintaxe."""
+    try:
+        resultado = subprocess.run(
+            [sys.executable, '-m', 'compileall', '-q', REPO_DIR],
+            timeout=30, capture_output=True, text=True,
+        )
+        return resultado.returncode == 0
+    except Exception as e:
+        log.error(f'Erro ao validar código novo: {e}')
+        return False
+
+def _reverter_para(commit):
+    try:
+        _git('reset', '--hard', commit, timeout=15)
+        log.warning(f'Revertido pro commit anterior ({commit[:8]}) — segue rodando a versão antiga')
+    except Exception as e:
+        log.error(f'Falha ao reverter pro commit anterior: {e}')
+
 def aplicar_atualizacao():
-    """Faz git pull (fast-forward only) e reinstala dependências. Retorna True se aplicou com sucesso."""
+    """Faz git pull (fast-forward only), valida e reinstala dependências.
+
+    Se o código novo não compilar ou as dependências novas falharem ao
+    instalar, reverte pro commit anterior em vez de deixar o serviço
+    reiniciar numa versão quebrada — sem isso, um push ruim no repositório
+    travaria TODOS os postes em crash-loop ao mesmo tempo, sem nenhuma forma
+    remota de recuperar (o Restart=always só reinicia pro mesmo código
+    quebrado). Retorna True se aplicou com sucesso.
+    """
+    commit_anterior = _commit_atual()
+
     try:
         _git('pull', '--ff-only', '--quiet', timeout=30)
     except Exception as e:
         log.error(f'Falha ao aplicar atualização: {e}')
         return False
 
-    return _instalar_dependencias()
+    if not _codigo_valido():
+        log.error('Código novo não passou na validação (erro de sintaxe/import)')
+        _reverter_para(commit_anterior)
+        return False
+
+    if not _instalar_dependencias():
+        _reverter_para(commit_anterior)
+        return False
+
+    return True

@@ -11,6 +11,7 @@ import time
 import signal
 import sys
 import logging
+from logging.handlers import RotatingFileHandler
 import requests
 import socketio
 from config import carregar, CONFIG_FILE, BASE_DIR
@@ -23,7 +24,10 @@ logging.basicConfig(
     format='%(asctime)s [%(levelname)s] %(message)s',
     handlers=[
         logging.StreamHandler(),
-        logging.FileHandler(os.path.join(BASE_DIR, 'viggio.log')),
+        # maxBytes/backupCount limitam o viggio.log a ~20MB no total — sem
+        # isso, rodando meses sem parar, o arquivo cresce pra sempre até
+        # lotar o cartão SD (o que pode travar até o próprio auto-update).
+        RotatingFileHandler(os.path.join(BASE_DIR, 'viggio.log'), maxBytes=5_000_000, backupCount=3),
     ]
 )
 log = logging.getLogger('viggio')
@@ -94,6 +98,31 @@ def conectar_socket():
         sio.connect(config['api_url'], auth={'apiKey': config['api_key']}, transports=['websocket'])
     except Exception as e:
         log.warning(f'Socket em tempo real indisponível ({e}) — tenta de novo no próximo ciclo')
+
+def notificar_systemd(estado):
+    """Manda uma notificação sd_notify pro systemd (READY=1 na subida,
+    WATCHDOG=1 a cada volta do loop) — sem depender de nenhuma lib nova, é só
+    um datagrama num socket Unix. Sem efeito se NOTIFY_SOCKET não estiver
+    definido (ex.: rodando à mão no terminal, fora do systemd) — opcional,
+    nunca é um requisito pra funcionar.
+
+    Junto com `Type=notify` + `WatchdogSec` no .service, isso cobre um caso
+    que o `Restart=always` sozinho não cobre: o processo travar (não
+    morrer) — sem "carinho" nenhum ao watchdog, o systemd mata e reinicia.
+    """
+    endereco = os.environ.get('NOTIFY_SOCKET')
+    if not endereco:
+        return
+    if endereco.startswith('@'):
+        endereco = '\0' + endereco[1:]
+    s = socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM)
+    try:
+        s.connect(endereco)
+        s.sendall(estado.encode())
+    except OSError as e:
+        log.debug(f'Falha ao notificar systemd ({estado}): {e}')
+    finally:
+        s.close()
 
 def obter_ip_local():
     """Descobre o IP local do Pi na rede (sem depender de serviços externos)."""
@@ -206,6 +235,7 @@ def main():
     led.definir_sirene(False)
 
     conectar_socket()
+    notificar_systemd('READY=1')
 
     proxima_verificacao_update = time.time() + config['update_check_interval']
 
@@ -228,6 +258,7 @@ def main():
             # normalmente: SystemExit não é uma Exception, não é capturado aqui.
             log.error(f'Erro inesperado no ciclo principal: {e}', exc_info=True)
 
+        notificar_systemd('WATCHDOG=1')
         time.sleep(config['polling_interval'])
 
 if __name__ == '__main__':

@@ -128,6 +128,29 @@ totem num estado errado:
 - **Encerramento** (`encerrar()`): tenta desligar o socket, mas apaga os
   LEDs mesmo que isso falhe.
 
+Pensado especificamente pra um dispositivo que roda sem ninguém por perto —
+uma falha que exigisse visita presencial é o pior cenário:
+
+- **Log sem limite de tamanho**: `viggio.log` usa `RotatingFileHandler`
+  (~20MB no total, 3 arquivos de backup) em vez de crescer pra sempre — sem
+  isso, meses de operação contínua encheriam o cartão SD.
+- **Atualização automática com rollback**: antes de aceitar um `git pull`,
+  `updater.py` confere se o código novo pelo menos compila (`python -m
+  compileall`) e se as dependências novas instalam. Se qualquer uma das duas
+  falhar, reverte sozinho pro commit anterior (`git reset --hard`) e
+  continua rodando a versão antiga — sem isso, um único commit ruim
+  travaria a frota inteira em loop de restart ao mesmo tempo, sem nenhuma
+  forma remota de recuperar.
+- **Watchdog do systemd**: além do `Restart=always` (que só cobre o
+  processo *morrer*), `main.py` avisa o systemd a cada volta do loop
+  principal (`WATCHDOG=1`, protocolo `sd_notify`, sem dependência nova). Se
+  o processo **travar** (ficar vivo mas parado) por mais de 60s
+  (`WatchdogSec=60` no `.service`), o systemd mata e reinicia sozinho.
+- **`calibrar.py` exige um PIN** de 6 dígitos (gerado a cada execução,
+  mostrado só no terminal de quem rodou o script) antes de liberar qualquer
+  ação — evita que outro aparelho na mesma rede local mexa nos canais
+  enquanto a ferramenta estiver aberta durante uma instalação/manutenção.
+
 ## Atualização automática
 
 `main.py` confere periodicamente (a cada `update_check_interval` segundos,
