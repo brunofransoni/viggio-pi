@@ -75,6 +75,10 @@ instala os pacotes Python, copia `config.example.json` → `config.json` (se
 ainda não existir) e registra os dois serviços systemd (com `User=` e
 `WorkingDirectory=` apontando pro usuário/diretório reais do clone).
 
+Se algum dos arquivos `.service` mudar depois (o auto-update só puxa
+código, nunca reinstala isso sozinho), rode `bash atualizar_servico.sh` num
+poste já instalado pra aplicar sem precisar repetir o `install.sh` inteiro.
+
 Depois do install:
 
 ```bash
