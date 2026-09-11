@@ -81,7 +81,13 @@ def disconnect():
 
 @sio.on('poste_estado')
 def ao_receber_estado(dados):
-    aplicar_se_mais_recente(dados.get('estado', 'normal'), dados.get('sirene', False), dados.get('ts'))
+    try:
+        aplicar_se_mais_recente(dados.get('estado', 'normal'), dados.get('sirene', False), dados.get('ts'))
+    except Exception as e:
+        # Nunca deixa um payload/estado inesperado derrubar a thread de
+        # leitura do socket.io — na pior das hipóteses, essa atualização se
+        # perde e o próximo polling ou push corrige sozinho.
+        log.error(f'Erro ao processar poste_estado via socket: {e}', exc_info=True)
 
 def conectar_socket():
     try:
@@ -172,9 +178,12 @@ def verificar_e_atualizar():
 
 def encerrar(sig, frame):
     log.info('Encerrando...')
-    if sio.connected:
-        sio.disconnect()
-    led.desligar()
+    try:
+        if sio.connected:
+            sio.disconnect()
+    except Exception as e:
+        log.warning(f'Erro ao desconectar o socket ao encerrar: {e}')
+    led.desligar()  # sempre tenta apagar tudo, mesmo se o disconnect acima falhar
     sys.exit(0)
 
 signal.signal(signal.SIGTERM, encerrar)
@@ -201,15 +210,23 @@ def main():
     proxima_verificacao_update = time.time() + config['update_check_interval']
 
     while True:
-        estado, sirene, ts = consultar_backend()
-        aplicar_se_mais_recente(estado, sirene, ts)
+        try:
+            estado, sirene, ts = consultar_backend()
+            aplicar_se_mais_recente(estado, sirene, ts)
 
-        if not sio.connected:
-            conectar_socket()
+            if not sio.connected:
+                conectar_socket()
 
-        if time.time() >= proxima_verificacao_update:
-            verificar_e_atualizar()
-            proxima_verificacao_update = time.time() + config['update_check_interval']
+            if time.time() >= proxima_verificacao_update:
+                verificar_e_atualizar()
+                proxima_verificacao_update = time.time() + config['update_check_interval']
+        except Exception as e:
+            # Um erro inesperado em qualquer passo do ciclo não pode derrubar
+            # o serviço inteiro (isso já tem retry/systemd, mas custa uma
+            # reinicialização de ~10s à toa) — loga e tenta de novo no
+            # próximo ciclo. sys.exit(0) do auto-update continua funcionando
+            # normalmente: SystemExit não é uma Exception, não é capturado aqui.
+            log.error(f'Erro inesperado no ciclo principal: {e}', exc_info=True)
 
         time.sleep(config['polling_interval'])
 

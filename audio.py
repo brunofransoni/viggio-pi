@@ -1,8 +1,11 @@
+import logging
 import subprocess
 import os
 import wave
 
 import numpy as np
+
+log = logging.getLogger('viggio')
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 SONS_DIR = os.path.join(BASE_DIR, 'sounds')
@@ -13,14 +16,22 @@ SONS = {
 }
 
 def tocar(tipo, volume=80):
-    """Toca um som de alerta de forma não bloqueante."""
+    """Toca um som de alerta de forma não bloqueante.
+
+    Nunca levanta exceção — se o som falhar (ex.: `aplay` ausente, sem
+    dispositivo de áudio), isso não pode interromper o resto do
+    processamento de estado (LED/sirene) que roda logo em seguida.
+    """
     arquivo = SONS.get(tipo)
     if arquivo and os.path.exists(arquivo):
-        subprocess.Popen(
-            ['aplay', '-q', arquivo],
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL
-        )
+        try:
+            subprocess.Popen(
+                ['aplay', '-q', arquivo],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL
+            )
+        except OSError as e:
+            log.warning(f'Falha ao tocar som "{tipo}": {e}')
 
 def gerar_beep(arquivo, frequencia=880, duracao=0.5, volume=0.8):
     """Gera um arquivo WAV de beep simples."""

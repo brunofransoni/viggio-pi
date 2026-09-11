@@ -201,6 +201,18 @@ class _CanalComFalhaIntermitente:
         self._duty_cycle = valor
 
 
+class _CanalSempreFalha:
+    """Simula um canal cujo barramento está realmente fora do ar — toda
+    escrita falha, não só uma vez."""
+    @property
+    def duty_cycle(self):
+        return None
+
+    @duty_cycle.setter
+    def duty_cycle(self, valor):
+        raise OSError(121, 'Remote I/O error')
+
+
 class TestFalhaIntermitenteI2C(unittest.TestCase):
     def setUp(self):
         for c in CANAIS_FAKE:
@@ -212,7 +224,10 @@ class TestFalhaIntermitenteI2C(unittest.TestCase):
 
     def tearDown(self):
         self.led._parar_thread_alternancia()
-        self.led.pca.channels[1] = CANAIS_FAKE[1]  # restaura o stub padrão
+        # CANAIS_FAKE é a mesma lista que self.led.pca.channels (compartilhada
+        # entre as classes de teste) — repor um MagicMock novo desfaz a troca
+        # pelo canal com falha simulada, pros próximos testes.
+        CANAIS_FAKE[1] = MagicMock(duty_cycle=None)
 
     def test_falha_pontual_de_i2c_nao_propaga(self):
         canal_falho = _CanalComFalhaIntermitente()
@@ -220,6 +235,22 @@ class TestFalhaIntermitenteI2C(unittest.TestCase):
         self.led.pca.channels[1] = canal_falho
 
         self.led._escrever(1, True)  # não deve levantar OSError
+
+    def test_falha_unica_recupera_sozinha_na_segunda_tentativa(self):
+        canal_falho = _CanalComFalhaIntermitente()
+        canal_falho.falhar_na_proxima_escrita = True
+        self.led.pca.channels[1] = canal_falho
+
+        self.led._escrever(1, True)
+        self.assertEqual(canal_falho.duty_cycle, 0)  # ativo_baixo=True + ligado=True => nível 0
+
+    def test_falha_persistente_desiste_e_loga_apos_duas_tentativas(self):
+        self.led.pca.channels[1] = _CanalSempreFalha()
+
+        with self.assertLogs('viggio', level='WARNING') as captura:
+            self.led._escrever(1, True)  # não propaga, mas loga a desistência
+
+        self.assertTrue(any('desisti após 2 tentativas' in msg for msg in captura.output))
 
     def test_falha_no_meio_do_alerta_nao_trava_a_alternancia(self):
         canal_falho = _CanalComFalhaIntermitente()

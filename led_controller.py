@@ -46,15 +46,24 @@ class LEDController:
         nivel_ligado = 0 if ativo_baixo else 65535
         nivel_desligado = 65535 if ativo_baixo else 0
         nivel = nivel_ligado if ligado else nivel_desligado
-        try:
-            self.pca.channels[canal].duty_cycle = nivel
-        except OSError as e:
-            # Falha intermitente no barramento I2C (comum com ruído elétrico
-            # de relé/SSR perto da fiação) — loga e segue. Sem isso, uma
-            # falha bem no meio do loop de alternância (_loop_alternancia)
-            # derrubava a thread inteira e travava o canal na última cor que
-            # tinha conseguido escrever, em vez de alternar.
-            log.warning(f'Falha ao escrever no canal {canal} (I2C): {e}')
+
+        # Falha intermitente no barramento I2C (comum com ruído elétrico de
+        # relé/SSR perto da fiação) — tenta mais uma vez antes de desistir.
+        # Sem isso, uma falha bem no meio do loop de alternância
+        # (_loop_alternancia) derrubava a thread inteira e travava o canal
+        # na última cor que tinha conseguido escrever, em vez de alternar;
+        # e uma escrita avulsa (aplicar_estado/definir_sirene, que não tem
+        # "próximo ciclo" pra tentar de novo sozinha) ficaria errada até a
+        # próxima mudança real de estado.
+        for tentativa in (1, 2):
+            try:
+                self.pca.channels[canal].duty_cycle = nivel
+                return
+            except OSError as e:
+                if tentativa == 2:
+                    log.warning(f'Falha ao escrever no canal {canal} (I2C), desisti após 2 tentativas: {e}')
+                else:
+                    time.sleep(0.05)
 
     def _parar_thread_alternancia(self):
         if self._thread_alternancia is not None:

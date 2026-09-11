@@ -106,6 +106,28 @@ Duas camadas, rodando ao mesmo tempo:
 - **Polling HTTP** (`consultar_backend()`, a cada `polling_interval` segundos) — é quem mantém o poste marcado como online (`ultimoHeartbeat`) e quem garante o retorno automático a `normal` depois de 60s sem novo evento. Rede de segurança: mesmo se o socket cair, o estado eventualmente converge sozinho no próximo ciclo.
 - **Push em tempo real** (Socket.IO, mesma chave de API do heartbeat) — o `main.py` mantém uma conexão persistente com o backend; qualquer mudança manual (LED forçado, sirene) ou alerta real chega em menos de 1 segundo, sem esperar o próximo ciclo de polling. Reconecta sozinho se cair (`journalctl -u viggio-portaria -f` deve mostrar "Socket em tempo real conectado" no boot).
 
+## Tolerância a falhas
+
+Pensado pra nenhuma falha pontual derrubar o serviço inteiro nem travar o
+totem num estado errado:
+
+- **Escrita no PCA9685** (`led_controller.py`): uma falha de I2C (`OSError`,
+  comum como ruído elétrico de relé/SSR perto da fiação) tenta de novo uma
+  vez antes de desistir e só logar um aviso — sem isso, uma falha bem no
+  meio do loop de alternância do alerta derrubava a thread e travava o
+  canal numa cor só.
+- **Som de alerta** (`audio.py`): se `aplay` falhar ou não existir, só loga
+  — nunca impede o LED/sirene de serem aplicados.
+- **Ciclo principal** (`main.py`): qualquer erro inesperado num ciclo do
+  loop de polling é logado e o processo segue pro próximo ciclo, em vez de
+  cair inteiro e depender do restart do systemd (`sys.exit(0)` do
+  auto-update continua funcionando normalmente).
+- **Evento recebido via socket**: um payload/erro inesperado só é logado —
+  na pior das hipóteses aquela atualização específica se perde, e o próximo
+  polling ou push corrige sozinho.
+- **Encerramento** (`encerrar()`): tenta desligar o socket, mas apaga os
+  LEDs mesmo que isso falhe.
+
 ## Atualização automática
 
 `main.py` confere periodicamente (a cada `update_check_interval` segundos,

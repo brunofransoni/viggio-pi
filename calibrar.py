@@ -97,7 +97,18 @@ conectar_pca9685()
 def escrever(canal, ligado, ativo_baixo):
     nivel_ligado = 0 if ativo_baixo else 65535
     nivel_desligado = 65535 if ativo_baixo else 0
-    pca.channels[canal].duty_cycle = nivel_ligado if ligado else nivel_desligado
+    nivel = nivel_ligado if ligado else nivel_desligado
+    # Falha intermitente de I2C (ruído elétrico de relé/SSR) — tenta mais
+    # uma vez antes de desistir, mesma lógica do led_controller.py.
+    for tentativa in (1, 2):
+        try:
+            pca.channels[canal].duty_cycle = nivel
+            return
+        except OSError as e:
+            if tentativa == 2:
+                print(f'Falha ao escrever no canal {canal} (I2C), desisti após 2 tentativas: {e}')
+            else:
+                time.sleep(0.05)
 
 
 def tudo_desligado(ativo_baixo_por_canal):
